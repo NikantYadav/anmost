@@ -63,7 +63,7 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
   };
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Response Status Bar */}
       <div className="flex items-center justify-between mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
         <div className="flex items-center gap-4">
@@ -108,12 +108,12 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
         ))}
       </div>
 
-      {/* Response Content */}
-      <div className="flex-1 overflow-hidden">
+      {/* Response Content - Flexible height container */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {activeTab === 'body' && (
-          <div className="h-full flex flex-col">
+          <div className="flex flex-col h-full">
             {/* Body Controls */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 flex-shrink-0">
               <div className="flex items-center gap-3">
                 {isJsonResponse() && (
                   <div className="flex items-center gap-2">
@@ -150,9 +150,9 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
               />
             </div>
 
-            {/* Response Body */}
-            <div className="flex-1 overflow-auto">
-              <pre className="h-full p-4 bg-gray-100 dark:bg-gray-900 rounded border text-sm font-mono whitespace-pre-wrap">
+            {/* Response Body - Scrollable container */}
+            <div className="flex-1 min-h-0 border rounded bg-gray-100 dark:bg-gray-900 overflow-hidden">
+              <pre className="h-full p-4 overflow-auto text-sm font-mono whitespace-pre-wrap">
                 <code 
                   className="text-gray-800 dark:text-gray-200"
                   dangerouslySetInnerHTML={{
@@ -170,9 +170,9 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
         )}
 
         {activeTab === 'headers' && (
-          <div className="h-full flex flex-col">
+          <div className="flex flex-col h-full">
             {/* Headers Search */}
-            <div className="mb-3">
+            <div className="mb-3 flex-shrink-0">
               <input
                 type="text"
                 value={searchTerm}
@@ -183,14 +183,14 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
             </div>
 
             {/* Headers List */}
-            <div className="flex-1 overflow-auto space-y-2">
+            <div className="flex-1 min-h-0 overflow-auto border rounded bg-gray-100 dark:bg-gray-900 p-2">
               {filteredHeaders.length === 0 ? (
                 <div className="text-center text-gray-500 dark:text-gray-400 py-8">
                   No headers match your search
                 </div>
               ) : (
                 filteredHeaders.map(([key, value]) => (
-                  <div key={key} className="flex gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                  <div key={key} className="flex gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded mb-2">
                     <div className="font-medium text-gray-700 dark:text-gray-300 min-w-0 flex-shrink-0">
                       <span 
                         dangerouslySetInnerHTML={{
@@ -223,12 +223,14 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
         )}
 
         {activeTab === 'cookies' && (
-          <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-            <div className="text-center">
-              <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-              </svg>
-              <p>Cookie management coming soon</p>
+          <div className="flex flex-col h-full">
+            <div className="flex-1 min-h-0 overflow-auto border rounded bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+              <div className="text-center">
+                <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                </svg>
+                <p>Cookie management coming soon</p>
+              </div>
             </div>
           </div>
         )}

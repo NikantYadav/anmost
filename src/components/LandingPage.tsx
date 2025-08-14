@@ -316,7 +316,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
               </div>
 
               {/* Response Section */}
-              <div className="space-y-4">
+              <div className="space-y-4 flex flex-col h-full">
                 <h3 className="heading-md text-slate-900 dark:text-white">Response</h3>
 
                 {error && (
@@ -326,7 +326,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
                 )}
 
                 {response && (
-                  <div className="space-y-3">
+                  <div className="space-y-3 flex flex-col flex-grow">
                     {/* Response Status */}
                     <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
                       <div className="flex items-center gap-4">
@@ -342,15 +342,15 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
                       </div>
                     </div>
 
-                    {/* Response Body */}
-                    <div className="relative">
-                      <pre className="h-64 p-4 bg-slate-100 dark:bg-slate-900 rounded-lg border overflow-auto text-sm code whitespace-pre-wrap">
+                    {/* Response Body - Fixed height with internal scrolling */}
+                    <div className="border rounded-lg bg-slate-100 dark:bg-slate-900 h-[400px]">
+                      <pre className="h-full overflow-auto p-4 text-sm code whitespace-pre-wrap">
                         <code className="text-slate-800 dark:text-slate-200">
                           {response.data}
                         </code>
                       </pre>
                     </div>
-                  </div>
+                  </div> 
                 )}
 
                 {!response && !error && !loading && (

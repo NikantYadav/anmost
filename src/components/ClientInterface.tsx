@@ -1,0 +1,769 @@
+import React, { useState, useEffect } from 'react';
+import EnvironmentManager from './EnvironmentManager';
+import RequestHistory, { addToHistory } from './RequestHistory';
+import CodeGenerator from './CodeGenerator';
+import ImportExport from './ImportExport';
+import ResponseViewer from './ResponseViewer';
+
+// Types
+interface Request {
+  id: string;
+  name: string;
+  method: string;
+  url: string;
+  headers: { key: string; value: string; enabled: boolean }[];
+  body: string;
+  bodyType: 'json' | 'form-data' | 'x-www-form-urlencoded' | 'raw' | 'binary';
+}
+
+interface Collection {
+  id: string;
+  name: string;
+  requests: Request[];
+}
+
+interface Environment {
+  id: string;
+  name: string;
+  variables: { key: string; value: string; enabled: boolean }[];
+}
+
+interface ResponseData {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  data: string;
+  time: number;
+  size: number;
+}
+
+interface User {
+  id: number;
+  email: string;
+  name: string;
+}
+
+interface ClientInterfaceProps {
+  user: User;
+  onLogout: () => void;
+}
+
+const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
+const BODY_TYPES = ['json', 'form-data', 'x-www-form-urlencoded', 'raw', 'binary'] as const;
+
+export default function ClientInterface({ user, onLogout }: ClientInterfaceProps) {
+  // Main state
+  const [activeTab, setActiveTab] = useState<string>('new-request');
+  const [tabs, setTabs] = useState<Request[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [activeEnvironment, setActiveEnvironment] = useState<string>('');
+  
+  // Current request state
+  const [currentRequest, setCurrentRequest] = useState<Request>({
+    id: 'new-request',
+    name: 'Untitled Request',
+    method: 'GET',
+    url: '',
+    headers: [{ key: 'Content-Type', value: 'application/json', enabled: true }],
+    body: '',
+    bodyType: 'json'
+  });
+  
+  // Response state
+  const [response, setResponse] = useState<ResponseData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  // UI state
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeRequestTab, setActiveRequestTab] = useState<'params' | 'headers' | 'body' | 'auth'>('headers');
+  const [activeResponseTab, setActiveResponseTab] = useState<'body' | 'headers' | 'cookies'>('body');
+  const [showEnvironmentManager, setShowEnvironmentManager] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showCodeGenerator, setShowCodeGenerator] = useState(false);
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [queryParams, setQueryParams] = useState<{ key: string; value: string; enabled: boolean }[]>([
+    { key: '', value: '', enabled: true }
+  ]);
+
+  // Load data from localStorage
+  useEffect(() => {
+    const savedCollections = localStorage.getItem('rest-client-collections');
+    const savedEnvironments = localStorage.getItem('rest-client-environments');
+    const savedActiveEnv = localStorage.getItem('rest-client-active-environment');
+    
+    if (savedCollections) setCollections(JSON.parse(savedCollections));
+    if (savedEnvironments) setEnvironments(JSON.parse(savedEnvironments));
+    if (savedActiveEnv) setActiveEnvironment(savedActiveEnv);
+  }, []);
+
+  // Save to localStorage
+  useEffect(() => {
+    localStorage.setItem('rest-client-collections', JSON.stringify(collections));
+  }, [collections]);
+
+  useEffect(() => {
+    localStorage.setItem('rest-client-environments', JSON.stringify(environments));
+  }, [environments]);
+
+  useEffect(() => {
+    localStorage.setItem('rest-client-active-environment', activeEnvironment);
+  }, [activeEnvironment]);
+
+  // Replace environment variables in text
+  const replaceVariables = (text: string): string => {
+    if (!activeEnvironment) return text;
+    
+    const env = environments.find(e => e.id === activeEnvironment);
+    if (!env) return text;
+    
+    let result = text;
+    env.variables.forEach(variable => {
+      if (variable.enabled) {
+        result = result.replace(new RegExp(`{{${variable.key}}}`, 'g'), variable.value);
+      }
+    });
+    
+    return result;
+  };
+
+  const handleSend = async () => {
+    setLoading(true);
+    setError('');
+    setResponse(null);
+    
+    const startTime = Date.now();
+    
+    try {
+      // Process URL and headers with environment variables
+      const baseUrl = replaceVariables(currentRequest.url);
+      const processedUrl = buildUrlWithParams(baseUrl);
+      const processedHeaders: Record<string, string> = {};
+      
+      currentRequest.headers.forEach(header => {
+        if (header.enabled && header.key && header.value) {
+          processedHeaders[header.key] = replaceVariables(header.value);
+        }
+      });
+      
+      // Process body
+      let processedBody: string | FormData | undefined;
+      if (['POST', 'PUT', 'PATCH'].includes(currentRequest.method)) {
+        if (currentRequest.bodyType === 'json') {
+          processedBody = replaceVariables(currentRequest.body);
+        } else if (currentRequest.bodyType === 'form-data') {
+          const formData = new FormData();
+          // Parse form data from body (simplified)
+          processedBody = formData;
+        } else {
+          processedBody = replaceVariables(currentRequest.body);
+        }
+      }
+      
+      const res = await fetch(processedUrl, {
+        method: currentRequest.method,
+        headers: processedHeaders,
+        body: processedBody,
+      });
+      
+      const endTime = Date.now();
+      const responseHeaders: Record<string, string> = {};
+      res.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+      
+      const contentType = res.headers.get('content-type') || '';
+      let responseData: string;
+      
+      if (contentType.includes('application/json')) {
+        const jsonData = await res.json();
+        responseData = JSON.stringify(jsonData, null, 2);
+      } else {
+        responseData = await res.text();
+      }
+      
+      const responseSize = new Blob([responseData]).size;
+      
+      const responseObj = {
+        status: res.status,
+        statusText: res.statusText,
+        headers: responseHeaders,
+        data: responseData,
+        time: endTime - startTime,
+        size: responseSize
+      };
+      
+      setResponse(responseObj);
+      
+      // Add to history
+      addToHistory(currentRequest.method, processedUrl, res.status, endTime - startTime);
+      
+    } catch (err: any) {
+      setError(err.message || 'Request failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addHeader = () => {
+    setCurrentRequest(prev => ({
+      ...prev,
+      headers: [...prev.headers, { key: '', value: '', enabled: true }]
+    }));
+  };
+
+  const updateHeader = (index: number, field: 'key' | 'value' | 'enabled', value: string | boolean) => {
+    setCurrentRequest(prev => ({
+      ...prev,
+      headers: prev.headers.map((header, i) => 
+        i === index ? { ...header, [field]: value } : header
+      )
+    }));
+  };
+
+  const removeHeader = (index: number) => {
+    setCurrentRequest(prev => ({
+      ...prev,
+      headers: prev.headers.filter((_, i) => i !== index)
+    }));
+  };
+
+  const saveRequest = () => {
+    const name = prompt('Enter request name:', currentRequest.name);
+    if (!name) return;
+    
+    const collectionName = prompt('Enter collection name (or leave empty for default):') || 'Default';
+    
+    let collection = collections.find(c => c.name === collectionName);
+    if (!collection) {
+      collection = {
+        id: Date.now().toString(),
+        name: collectionName,
+        requests: []
+      };
+      setCollections(prev => [...prev, collection!]);
+    }
+    
+    const savedRequest = {
+      ...currentRequest,
+      id: Date.now().toString(),
+      name
+    };
+    
+    setCollections(prev => prev.map(c => 
+      c.id === collection!.id 
+        ? { ...c, requests: [...c.requests, savedRequest] }
+        : c
+    ));
+  };
+
+  const loadRequest = (request: Request) => {
+    setCurrentRequest(request);
+    setActiveTab(request.id);
+    if (!tabs.find(t => t.id === request.id)) {
+      setTabs(prev => [...prev, request]);
+    }
+  };
+
+  const loadFromHistory = (method: string, url: string) => {
+    setCurrentRequest(prev => ({
+      ...prev,
+      method,
+      url
+    }));
+    setShowHistory(false);
+  };
+
+  const addQueryParam = () => {
+    setQueryParams(prev => [...prev, { key: '', value: '', enabled: true }]);
+  };
+
+  const updateQueryParam = (index: number, field: 'key' | 'value' | 'enabled', value: string | boolean) => {
+    setQueryParams(prev => prev.map((param, i) => 
+      i === index ? { ...param, [field]: value } : param
+    ));
+  };
+
+  const removeQueryParam = (index: number) => {
+    setQueryParams(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Build URL with query parameters
+  const buildUrlWithParams = (baseUrl: string): string => {
+    const enabledParams = queryParams.filter(p => p.enabled && p.key && p.value);
+    if (enabledParams.length === 0) return baseUrl;
+    
+    const url = new URL(baseUrl);
+    enabledParams.forEach(param => {
+      url.searchParams.set(param.key, replaceVariables(param.value));
+    });
+    
+    return url.toString();
+  };
+
+  const handleImportData = (data: { collections?: Collection[]; environments?: Environment[] }) => {
+    if (data.collections) {
+      // Merge collections, renaming duplicates
+      const newCollections = [...collections];
+      data.collections.forEach(importedCollection => {
+        let name = importedCollection.name;
+        let counter = 1;
+        while (newCollections.find(c => c.name === name)) {
+          name = `${importedCollection.name} (${counter})`;
+          counter++;
+        }
+        newCollections.push({
+          ...importedCollection,
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          name
+        });
+      });
+      setCollections(newCollections);
+    }
+
+    if (data.environments) {
+      // Merge environments, renaming duplicates
+      const newEnvironments = [...environments];
+      data.environments.forEach(importedEnv => {
+        let name = importedEnv.name;
+        let counter = 1;
+        while (newEnvironments.find(e => e.name === name)) {
+          name = `${importedEnv.name} (${counter})`;
+          counter++;
+        }
+        newEnvironments.push({
+          ...importedEnv,
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          name
+        });
+      });
+      setEnvironments(newEnvironments);
+    }
+  };
+
+  return (
+    <div className="h-screen flex bg-gradient-to-br from-slate-50 via-white to-cyan-50 dark:from-slate-900 dark:via-slate-800 dark:to-cyan-950">
+      {/* Sidebar */}
+      {sidebarOpen && (
+        <div className="w-80 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-r border-slate-200/50 dark:border-slate-700/50 flex flex-col shadow-xl">
+          <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50">
+            <h2 className="heading-md text-slate-900 dark:text-white">Collections</h2>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4">
+            {collections.length === 0 ? (
+              <div className="text-center py-8">
+                <svg className="w-16 h-16 mx-auto mb-4 opacity-50 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <p className="body-md text-gray-500 dark:text-gray-400 mb-4">No collections yet</p>
+                <p className="body-sm text-gray-400 dark:text-gray-500">Save your first request to get started</p>
+              </div>
+            ) : (
+              collections.map(collection => (
+                <div key={collection.id} className="mb-4">
+                  <h3 className="heading-sm text-gray-700 dark:text-gray-300 mb-2">{collection.name}</h3>
+                  <div className="ml-4 space-y-1">
+                    {collection.requests.map(request => (
+                      <button
+                        key={request.id}
+                        onClick={() => loadRequest(request)}
+                        className="w-full text-left p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                      >
+                        <span className={`px-2 py-1 text-xs rounded font-mono ${
+                          request.method === 'GET' ? 'bg-green-100 text-green-800' :
+                          request.method === 'POST' ? 'bg-blue-100 text-blue-800' :
+                          request.method === 'PUT' ? 'bg-yellow-100 text-yellow-800' :
+                          request.method === 'DELETE' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {request.method}
+                        </span>
+                        <span className="body-sm text-gray-600 dark:text-gray-400 truncate">
+                          {request.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+            <select
+              value={activeEnvironment}
+              onChange={(e) => setActiveEnvironment(e.target.value)}
+              className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value="">No Environment</option>
+              {environments.map(env => (
+                <option key={env.id} value={env.id}>{env.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/25">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h1 className="heading-lg bg-gradient-to-r from-cyan-500 to-blue-600 bg-clip-text text-transparent">ANMOST</h1>
+              </div>
+              <span className="body-sm text-gray-600 dark:text-gray-400">
+                Welcome, {user.name}
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowHistory(true)}
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg button-text transition-colors shadow-lg shadow-cyan-500/25"
+              >
+                History
+              </button>
+              <button
+                onClick={() => setShowEnvironmentManager(true)}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg button-text transition-colors"
+              >
+                Environments
+              </button>
+              <button
+                onClick={() => setShowCodeGenerator(true)}
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg button-text transition-colors"
+                disabled={!currentRequest.url}
+              >
+                Code
+              </button>
+              <button
+                onClick={() => setShowImportExport(true)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg button-text transition-colors"
+              >
+                Import/Export
+              </button>
+              <button
+                onClick={saveRequest}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg button-text transition-colors"
+              >
+                Save
+              </button>
+              <button
+                onClick={onLogout}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg button-text transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Request Section */}
+        <div className="flex-1 flex flex-col p-6">
+          {/* URL Bar */}
+          <div className="flex gap-3 mb-6">
+            <select
+              value={currentRequest.method}
+              onChange={(e) => setCurrentRequest(prev => ({ ...prev, method: e.target.value }))}
+              className="px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white code focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            >
+              {HTTP_METHODS.map(method => (
+                <option key={method} value={method}>{method}</option>
+              ))}
+            </select>
+            
+            <input
+              type="text"
+              value={currentRequest.url}
+              onChange={(e) => setCurrentRequest(prev => ({ ...prev, url: e.target.value }))}
+              placeholder="https://api.example.com/endpoint"
+              className="flex-1 px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            />
+            
+            <button
+              onClick={handleSend}
+              disabled={loading || !currentRequest.url}
+              className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-lg button-text transition-all shadow-lg shadow-cyan-500/25 disabled:shadow-none"
+            >
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                  Sending...
+                </span>
+              ) : (
+                'Send'
+              )}
+            </button>
+          </div>
+
+          <div className="flex-1 flex gap-6">
+            {/* Request Details */}
+            <div className="flex-1 flex flex-col">
+              {/* Request Tabs */}
+              <div className="flex border-b border-slate-200 dark:border-slate-700 mb-4">
+                {(['params', 'headers', 'body', 'auth'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveRequestTab(tab)}
+                    className={`px-4 py-2 capitalize button-text ${
+                      activeRequestTab === tab
+                        ? 'border-b-2 border-blue-500 text-blue-600'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {/* Request Content */}
+              <div className="flex-1 bg-white/50 dark:bg-slate-800/50 rounded-lg p-4">
+                {activeRequestTab === 'params' && (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <h3 className="heading-sm text-slate-900 dark:text-white">Query Parameters</h3>
+                      <button
+                        onClick={addQueryParam}
+                        className="px-3 py-1 bg-blue-600 text-white rounded text-sm button-text"
+                      >
+                        Add Parameter
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {queryParams.map((param, index) => (
+                        <div key={index} className="flex gap-2 items-center">
+                          <input
+                            type="checkbox"
+                            checked={param.enabled}
+                            onChange={(e) => updateQueryParam(index, 'enabled', e.target.checked)}
+                            className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                          />
+                          <input
+                            type="text"
+                            value={param.key}
+                            onChange={(e) => updateQueryParam(index, 'key', e.target.value)}
+                            placeholder="Parameter name"
+                            className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                          />
+                          <input
+                            type="text"
+                            value={param.value}
+                            onChange={(e) => updateQueryParam(index, 'value', e.target.value)}
+                            placeholder="Parameter value"
+                            className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                          />
+                          <button
+                            onClick={() => removeQueryParam(index)}
+                            className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeRequestTab === 'headers' && (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <h3 className="heading-sm text-slate-900 dark:text-white">Headers</h3>
+                      <button
+                        onClick={addHeader}
+                        className="px-3 py-1 bg-blue-600 text-white rounded text-sm button-text"
+                      >
+                        Add Header
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {currentRequest.headers.map((header, index) => (
+                        <div key={index} className="flex gap-2 items-center">
+                          <input
+                            type="checkbox"
+                            checked={header.enabled}
+                            onChange={(e) => updateHeader(index, 'enabled', e.target.checked)}
+                            className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                          />
+                          <input
+                            type="text"
+                            value={header.key}
+                            onChange={(e) => updateHeader(index, 'key', e.target.value)}
+                            placeholder="Header name"
+                            className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                          />
+                          <input
+                            type="text"
+                            value={header.value}
+                            onChange={(e) => updateHeader(index, 'value', e.target.value)}
+                            placeholder="Header value"
+                            className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                          />
+                          <button
+                            onClick={() => removeHeader(index)}
+                            className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeRequestTab === 'body' && ['POST', 'PUT', 'PATCH'].includes(currentRequest.method) && (
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      {BODY_TYPES.map(type => (
+                        <button
+                          key={type}
+                          onClick={() => setCurrentRequest(prev => ({ ...prev, bodyType: type }))}
+                          className={`px-3 py-1 rounded text-sm button-text ${
+                            currentRequest.bodyType === type
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                          }`}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    <textarea
+                      value={currentRequest.body}
+                      onChange={(e) => setCurrentRequest(prev => ({ ...prev, body: e.target.value }))}
+                      placeholder={currentRequest.bodyType === 'json' ? '{\n  "key": "value"\n}' : 'Request body...'}
+                      className="w-full h-64 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white code text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    />
+                  </div>
+                )}
+
+                {activeRequestTab === 'auth' && (
+                  <div className="space-y-4">
+                    <h3 className="heading-sm text-slate-900 dark:text-white">Authentication</h3>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-700 rounded">
+                      <p className="body-sm text-slate-600 dark:text-slate-400 mb-4">
+                        Add authentication headers manually in the Headers tab, or use environment variables for tokens.
+                      </p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block body-sm heading-sm text-slate-700 dark:text-slate-300 mb-1">
+                            Common Auth Headers:
+                          </label>
+                          <div className="space-y-2 body-sm">
+                            <div className="code bg-white dark:bg-slate-800 p-2 rounded border">
+                              Authorization: Bearer {'{{token}}'}
+                            </div>
+                            <div className="code bg-white dark:bg-slate-800 p-2 rounded border">
+                              Authorization: Basic {'{{base64_credentials}}'}
+                            </div>
+                            <div className="code bg-white dark:bg-slate-800 p-2 rounded border">
+                              X-API-Key: {'{{api_key}}'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Response Section */}
+            <div className="flex-1 flex flex-col">
+              <h3 className="heading-md text-slate-900 dark:text-white mb-4">Response</h3>
+
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded text-red-700 dark:text-red-300">
+                  {error}
+                </div>
+              )}
+
+              {response && (
+                <ResponseViewer
+                  response={response}
+                  activeTab={activeResponseTab}
+                  onTabChange={setActiveResponseTab}
+                />
+              )}
+
+              {!response && !error && !loading && (
+                <div className="flex-1 flex items-center justify-center text-slate-500 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg">
+                  <div className="text-center">
+                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <p>Send a request to see the response</p>
+                  </div>
+                </div>
+              )}
+
+              {loading && (
+                <div className="flex-1 flex items-center justify-center bg-white/50 dark:bg-slate-800/50 rounded-lg">
+                  <div className="text-center">
+                    <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-slate-600 dark:text-slate-400">Sending request...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showEnvironmentManager && (
+        <EnvironmentManager
+          environments={environments}
+          onEnvironmentsChange={setEnvironments}
+          onClose={() => setShowEnvironmentManager(false)}
+        />
+      )}
+
+      {showHistory && (
+        <RequestHistory
+          onLoadRequest={loadFromHistory}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      {showCodeGenerator && (
+        <CodeGenerator
+          request={currentRequest}
+          onClose={() => setShowCodeGenerator(false)}
+        />
+      )}
+
+      {showImportExport && (
+        <ImportExport
+          collections={collections}
+          environments={environments}
+          onImport={handleImportData}
+          onClose={() => setShowImportExport(false)}
+        />
+      )}
+    </div>
+  );
+}

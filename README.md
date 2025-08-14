@@ -1,40 +1,179 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# AnMost
 
-## Getting Started
+A modern, feature-rich REST client application built with Next.js and TypeScript, providing all the essential features of Postman and more.
 
-First, run the development server:
+## 🚀 Features
 
+### Core Functionality
+- **HTTP Methods**: Support for GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+- **Request Builder**: Intuitive interface for building HTTP requests
+- **Response Viewer**: Beautiful, syntax-highlighted response display
+- **Real-time Testing**: Send requests and view responses instantly
+
+### Advanced Features
+- **Collections**: Organize requests into collections for better management
+- **Environment Variables**: Define and use variables across requests with `{{variable}}` syntax
+- **Request History**: Automatic tracking of all sent requests with search and filter
+- **Code Generation**: Generate code snippets in 8+ programming languages:
+  - cURL
+  - JavaScript (Fetch & Axios)
+  - Python (Requests)
+  - Node.js (Axios)
+  - PHP (cURL)
+  - Java (OkHttp)
+  - C# (HttpClient)
+
+### Data Management
+- **Import/Export**: Backup and share collections and environments
+- **Local Storage**: All data persists locally in your browser
+- **Search & Filter**: Powerful search across requests, responses, and headers
+
+### User Experience
+- **Dark/Light Mode**: Automatic theme detection
+- **Responsive Design**: Works perfectly on desktop and mobile
+- **Keyboard Shortcuts**: Efficient workflow with keyboard navigation
+- **Syntax Highlighting**: JSON responses with proper formatting
+
+## 🛠️ Technical Stack
+
+- **Framework**: Next.js 14 with TypeScript
+- **Styling**: Tailwind CSS
+- **State Management**: React Hooks
+- **Storage**: Browser LocalStorage
+- **Icons**: Heroicons
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js 18+ 
+- npm, yarn, pnpm, or bun
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd rest-client-pro
+```
+
+2. Install dependencies:
+```bash
+npm install
+# or
+yarn install
+# or
+pnpm install
+```
+
+3. Run the development server:
 ```bash
 npm run dev
 # or
 yarn dev
 # or
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+## 📖 Usage Guide
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
+### Getting Started (Free Features)
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+1. **Make HTTP Requests**: Choose method, enter URL, add headers and body
+2. **View Responses**: See formatted responses with syntax highlighting
+3. **Generate Code**: Get code snippets in 8+ programming languages
+4. **Basic Testing**: Test any API endpoint immediately
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Premium Features (Sign In Required)
 
-## Learn More
+#### Using Environment Variables
+1. Sign in and click "Environments" in the toolbar
+2. Create environments for different setups (dev, staging, prod)
+3. Add variables with key-value pairs
+4. Use variables in requests with `{{variable_name}}` syntax
+5. Variables work in URLs, headers, and request bodies
 
-To learn more about Next.js, take a look at the following resources:
+#### Managing Collections
+1. Save requests by clicking "Save" button
+2. Organize requests into collections by project or feature
+3. Access saved requests from the sidebar
+4. Click any saved request to load it instantly
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
+#### Request History
+1. All sent requests are automatically saved
+2. Search and filter through your request history
+3. Quickly re-run previous requests
+4. Track API testing over time
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+#### Import/Export Data
+1. Click "Import/Export" in the toolbar
+2. **Export**: Download collections and environments as JSON
+3. **Import**: Upload JSON files to restore or share data
+4. **Backup**: Keep your API testing data safe
 
-## Deploy on Vercel
+## 🎯 Feature Tiers
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Free Tier (No Account Required)
+- ✅ All HTTP methods (GET, POST, PUT, DELETE, etc.)
+- ✅ Request/Response testing
+- ✅ Code generation (8+ languages)
+- ✅ Basic request building
+- ✅ Response formatting and syntax highlighting
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+### Premium Tier (Free Account Required)
+- ✅ Save requests in collections
+- ✅ Environment variables with `{{}}` syntax
+- ✅ Request history with search
+- ✅ Import/Export collections
+- ✅ Data sync across sessions
+- ✅ Advanced organization features
+
+### Comparison with Postman
+
+| Feature | REST Client Pro | Postman |
+|---------|----------------|---------|
+| Basic HTTP Testing | ✅ Free | ✅ Free |
+| Collections | ✅ Free account | ✅ Free account |
+| Environment Variables | ✅ Free account | ✅ Free account |
+| Code Generation | ✅ Free | ✅ Free |
+| Request History | ✅ Free account | ✅ Free account |
+| Offline Usage | ✅ Full offline | ❌ Limited offline |
+| No Download Required | ✅ Web-based | ❌ Desktop app |
+| Open Source | ✅ MIT License | ❌ Proprietary |
+
+## 🔧 Configuration
+
+### Environment Variables
+The application uses browser localStorage for persistence. No server-side configuration required.
+
+### Customization
+- Modify `src/styles/globals.css` for custom styling
+- Update `tailwind.config.js` for theme customization
+- Extend components in `src/components/` for additional features
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Inspired by Postman's excellent UX
+- Built with modern web technologies
+- Designed for developers, by developers
+
+## 🐛 Bug Reports & Feature Requests
+
+Please use the GitHub Issues tab to report bugs or request new features.
+
+---
+
+**Made with ❤️ for the developer community**

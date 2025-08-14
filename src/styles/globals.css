@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -8,8 +9,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  --font-display: 'Outfit', 'Inter', system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,5 +24,182 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Dark mode scrollbar */
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-track {
+    background: #2d2d2d;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #555;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #777;
+  }
+}
+
+/* Syntax highlighting for JSON */
+.json-key {
+  color: #0066cc;
+}
+
+.json-string {
+  color: #009900;
+}
+
+.json-number {
+  color: #cc6600;
+}
+
+.json-boolean {
+  color: #cc0066;
+}
+
+.json-null {
+  color: #999999;
+}
+
+/* Loading animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Highlight search results */
+mark {
+  background-color: #ffeb3b;
+  color: #000;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* Modern Typography Classes */
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.font-sans {
+  font-family: var(--font-sans);
+}
+
+/* Enhanced text rendering */
+.text-balance {
+  text-wrap: balance;
+}
+
+.tracking-tight {
+  letter-spacing: -0.025em;
+}
+
+.tracking-tighter {
+  letter-spacing: -0.05em;
+}
+
+/* Modern heading styles */
+.heading-xl {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 3.5rem;
+  line-height: 1.1;
+  letter-spacing: -0.05em;
+  background: linear-gradient(135deg, #06b6d4 0%, #2563eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.heading-lg {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 2.25rem;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.heading-md {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.5rem;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+}
+
+.heading-sm {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.125rem;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+}
+
+/* Body text styles */
+.body-lg {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.body-md {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.body-sm {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Code and monospace */
+.code {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+}
+
+/* Button text */
+.button-text {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }

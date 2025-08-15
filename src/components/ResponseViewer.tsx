@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { brightLightTheme, brightDarkTheme } from '../utils/syntaxThemes';
 import { detectMimeType, generateFilename, createDownloadBlob, downloadBlob, getMimeTypeIcon } from '../utils/mimeTypes';
@@ -41,9 +41,33 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
     
     return () => observer.disconnect();
   }, []);
-
-  // Auto-detect content type and set appropriate default format
+  
+  const isJsonResponse = useCallback(() => {
+    if (!response) return false;
+    
+    // First, check if it looks like JSON based on content
+    if (response.data.trim().startsWith('{') || response.data.trim().startsWith('[')) {
+      try {
+        JSON.parse(response.data);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    
+    // Then check content type header
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    return contentType.toLowerCase().includes('application/json');
+  }, [response]);
+  
+  // Format response body appropriately
   useEffect(() => {
+    if (!response) return;
+    
     const contentType = response.contentType || 
       Object.entries(response.headers).find(
         ([key]) => key.toLowerCase() === 'content-type'
@@ -56,7 +80,7 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
     } else {
       setBodyFormat('raw');
     }
-  }, [response]);
+  }, [response, isJsonResponse]);
 
   const formatJson = (jsonString: string): string => {
     try {
@@ -64,15 +88,6 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
       return JSON.stringify(parsed, null, 2);
     } catch {
       return jsonString;
-    }
-  };
-
-  const isJsonResponse = () => {
-    try {
-      JSON.parse(response.data);
-      return true;
-    } catch {
-      return false;
     }
   };
 
@@ -99,6 +114,17 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
   };
 
   const detectLanguage = () => {
+    if (!response) return 'text';
+    
+    // First check for specific content types
+    if (isJsonResponse()) {
+      return 'json';
+    }
+    
+    if (isXmlResponse()) {
+      return 'xml';
+    }
+    
     const contentType = response.contentType || 
       Object.entries(response.headers).find(
         ([key]) => key.toLowerCase() === 'content-type'
@@ -313,7 +339,7 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <span>Rendered HTML Preview - External resources may not load due to security restrictions</span>
                       </div>
@@ -341,7 +367,8 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
                 <div className="h-full bg-gray-100 dark:bg-gray-900">
                   <SyntaxHighlighter
                     language={detectLanguage()}
-                    style={isDark ? brightDarkTheme : brightLightTheme}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    style={isDark ? brightDarkTheme : brightLightTheme as any}
                     customStyle={{
                       margin: 0,
                       padding: '16px',

@@ -73,6 +73,11 @@ export function useEnvironments() {
     localStorage.setItem('rest-client-active-environment', envId);
   }, []);
 
+  // Create a memoized setter function that can be exposed
+  const setEnvironmentsState = useCallback((newEnvironments: Environment[]) => {
+    setEnvironments(newEnvironments);
+  }, []);
+
   useEffect(() => {
     fetchEnvironments();
   }, [fetchEnvironments]);
@@ -86,6 +91,7 @@ export function useEnvironments() {
     createEnvironment,
     updateEnvironment,
     deleteEnvironment,
-    setActiveEnvironment: setActiveEnv
+    setActiveEnvironment: setActiveEnv,
+    setEnvironments: setEnvironmentsState
   };
 }

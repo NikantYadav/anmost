@@ -1,15 +1,6 @@
 import React, { useState } from 'react';
 import { useHistory } from '../hooks/useHistory';
 
-interface HistoryItem {
-  id: string;
-  method: string;
-  url: string;
-  status?: number;
-  timestamp: number;
-  duration?: number;
-}
-
 interface RequestHistoryProps {
   onLoadRequest: (method: string, url: string) => void;
   onClose: () => void;

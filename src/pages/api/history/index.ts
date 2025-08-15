@@ -58,11 +58,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const historyItem = await withORM(async (em) => {
         const newHistoryItem = em.create(History, {
-          method,
-          url,
-          status,
-          duration,
-          user
+          method: method as string,
+          url: url as string,
+          status: status as number | undefined,
+          duration: duration as number | undefined,
+          user,
+          createdAt: new Date()
         });
 
         await em.persistAndFlush(newHistoryItem);

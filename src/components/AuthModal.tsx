@@ -49,8 +49,8 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
       setEmail('');
       setPassword('');
       setName('');
-    } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+    } catch (err: Error | unknown) {
+      setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
       setLoading(false);
     }

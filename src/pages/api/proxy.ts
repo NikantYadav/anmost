@@ -58,13 +58,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const startTime = Date.now();
 
     // Prepare request options
+    // Create a clean headers object without 'host'
+    const cleanHeaders: HeadersInit = { ...headers };
+    if ('host' in cleanHeaders) {
+      delete (cleanHeaders as Record<string, string>).host;
+    }
+
     const requestOptions: RequestInit = {
       method,
-      headers: {
-        ...headers,
-        // Remove host header to avoid conflicts
-        host: undefined,
-      },
+      headers: cleanHeaders
     };
 
     // Handle request body based on type
@@ -154,7 +156,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             responseData = `[Binary data - ${buffer.byteLength} bytes (${sizeInMB.toFixed(2)}MB)]\n\nBase64: ${base64Data}`;
           }
         }
-      } catch (parseError) {
+      } catch {
         responseData = 'Unable to parse response body';
       }
 
@@ -174,19 +176,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         size: responseSize,
         contentType: contentType,
       });
-    } catch (fetchError: any) {
+    } catch (fetchError: Error | unknown) {
       clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
         throw new Error('Request timeout (30 seconds)');
       }
       throw fetchError;
     }
 
-  } catch (error: any) {
+  } catch (error: Error | unknown) {
     console.error('Proxy request failed:', error);
     res.status(500).json({ 
-      error: error.message || 'Request failed',
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error instanceof Error ? error.message : 'Request failed',
+      details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
     });
   }
 }

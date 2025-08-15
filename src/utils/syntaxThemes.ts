@@ -1,7 +1,8 @@
 // Custom bright color schemes for syntax highlighting
+import { SyntaxThemeType, convertThemeStyles } from './syntaxThemeTypes';
 
-// Enhanced themes with fallback colors for unrecognized text
-export const brightLightTheme = {
+// Theme definitions - will be converted to proper types later
+const brightLightThemeRaw = {
   'code[class*="language-"]': {
     color: '#2d3748 !important', // Force default text color for unrecognized content
     background: 'transparent',
@@ -52,12 +53,13 @@ export const brightLightTheme = {
   'namespace': { color: '#7c3aed' }, // Bright purple
   'prolog': { color: '#6b7280' }, // Gray
   'doctype': { color: '#6b7280' }, // Gray
-  'cdata': { color: '#6b7280' }, // Gray
+  'cdata': { color: '#6b7280', fontStyle: 'italic' }, // Gray italic
 };
 
-export const brightDarkTheme = {
+// Similar theme for dark mode
+const brightDarkThemeRaw = {
   'code[class*="language-"]': {
-    color: '#e2e8f0 !important', // Force default text color for unrecognized content
+    color: '#e5e7eb !important', // Force default text color for unrecognized content
     background: 'transparent',
     fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
     fontSize: '14px',
@@ -71,7 +73,7 @@ export const brightDarkTheme = {
     hyphens: 'none',
   },
   'pre[class*="language-"]': {
-    color: '#e2e8f0 !important', // Force default text color for unrecognized content
+    color: '#e5e7eb !important', // Force default text color for unrecognized content
     background: 'transparent',
     fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
     fontSize: '14px',
@@ -94,9 +96,9 @@ export const brightDarkTheme = {
   'null': { color: '#9ca3af' }, // Light gray
   'punctuation': { color: '#d1d5db' }, // Light gray
   'operator': { color: '#d1d5db' }, // Light gray
-  'plain': { color: '#e2e8f0 !important' }, // Fallback for plain text
-  'token': { color: '#e2e8f0 !important' }, // Generic token fallback
-  'text': { color: '#e2e8f0 !important' }, // Text fallback
+  'plain': { color: '#e5e7eb !important' }, // Fallback for plain text
+  'token': { color: '#e5e7eb !important' }, // Generic token fallback
+  'text': { color: '#e5e7eb !important' }, // Text fallback
   'keyword': { color: '#a78bfa' }, // Bright purple
   'function': { color: '#60a5fa' }, // Bright blue
   'comment': { color: '#9ca3af', fontStyle: 'italic' }, // Light gray italic
@@ -108,3 +110,7 @@ export const brightDarkTheme = {
   'doctype': { color: '#9ca3af' }, // Light gray
   'cdata': { color: '#9ca3af' }, // Light gray
 };
+
+// Convert themes to proper types for React's CSSProperties
+export const brightLightTheme: SyntaxThemeType = convertThemeStyles(brightLightThemeRaw);
+export const brightDarkTheme: SyntaxThemeType = convertThemeStyles(brightDarkThemeRaw);

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 
 interface ApiOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  body?: any;
+  body?: unknown;
   headers?: Record<string, string>;
 }
 
@@ -42,7 +42,7 @@ export function useApi() {
           ...(token && { Authorization: `Bearer ${token}` }),
           ...options.headers,
         },
-        ...(options.body && { body: JSON.stringify(options.body) }),
+        ...(options.body ? { body: JSON.stringify(options.body) } : {}),
       });
 
       if (!response.ok) {
@@ -55,8 +55,8 @@ export function useApi() {
       }
 
       return await response.json();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
       throw err;
     } finally {
       setLoading(false);
@@ -82,8 +82,8 @@ export function useApi() {
       }
 
       return await response.json();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
       throw err;
     } finally {
       setLoading(false);

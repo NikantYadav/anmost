@@ -20,7 +20,7 @@ export default function RestClient() {
     );
   }
 
-  const handleAuthSuccessAndClose = (user: any, token: string) => {
+  const handleAuthSuccessAndClose = (user: { id: number; email: string; name: string }, token: string) => {
     handleAuthSuccess(user, token);
     setShowAuthModal(false);
   };

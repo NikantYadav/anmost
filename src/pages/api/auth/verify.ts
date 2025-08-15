@@ -37,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         name: user.name,
       },
     });
-  } catch (error: any) {
+  } catch (error: Error | unknown) {
     console.error('Token verification error:', error);
     res.status(401).json({ message: 'Invalid token' });
   }

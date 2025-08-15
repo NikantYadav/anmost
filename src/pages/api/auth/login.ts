@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         name: user.name,
       },
     });
-  } catch (error: any) {
+  } catch (error: Error | unknown) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }

@@ -73,8 +73,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const collection = await withORM(async (em) => {
         const newCollection = em.create(Collection, {
-          name,
-          user
+          name: name as string,
+          user,
+          createdAt: new Date(),
+          updatedAt: new Date()
         });
 
         await em.persistAndFlush(newCollection);
@@ -108,11 +110,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
 
       res.status(201).json(formattedCollection);
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
       console.error('Error creating collection:', error);
       
+      const errorMessage = error instanceof Error ? error.message : '';
+      
       // Handle unique constraint violation
-      if (error.message && error.message.includes('UNIQUE constraint failed')) {
+      if (errorMessage && errorMessage.includes('UNIQUE constraint failed')) {
         return res.status(409).json({ error: `Collection "${name}" already exists` });
       }
       

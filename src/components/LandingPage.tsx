@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import CodeGenerator from './CodeGenerator';
 import { useApi } from '../hooks/useApi';
-import { validateUrl, formatUrl } from '../utils/validation';
+import { validateUrl } from '../utils/validation';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { brightLightTheme, brightDarkTheme } from '../utils/syntaxThemes';
 import BodyEditor from './BodyEditor';
@@ -30,7 +30,7 @@ interface ResponseData {
 }
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
-const BODY_TYPES = ['json', 'form-data', 'x-www-form-urlencoded', 'raw', 'binary'] as const;
+const BODY_TYPES = ['json', 'form-data', 'x-www-form-urlencoded' , 'raw', 'binary'] as const;
 
 export default function LandingPage({ onSignIn }: LandingPageProps) {
   const { proxyRequest } = useApi();
@@ -113,8 +113,8 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
 
       setResponse(responseObj);
 
-    } catch (err: any) {
-      setError(err.message || 'Request failed');
+    } catch (err: Error | unknown) {
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setLoading(false);
     }
@@ -172,7 +172,8 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
     }
   };
 
-  const isJsonResponse = () => {
+  // Wrap in useCallback to avoid recreation on each render
+  const isJsonResponse = useCallback(() => {
     if (!response) return false;
     try {
       JSON.parse(response.data);
@@ -180,7 +181,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
     } catch {
       return false;
     }
-  };
+  }, [response]);
 
   const isHtmlResponse = () => {
     if (!response) return false;
@@ -207,6 +208,11 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
 
   const detectLanguage = () => {
     if (!response) return 'text';
+    
+    // Check if it's XML
+    if (isXmlResponse()) {
+      return 'xml';
+    }
     
     const contentType = response.contentType || 
       Object.entries(response.headers).find(
@@ -298,7 +304,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
     } else {
       setBodyFormat('raw');
     }
-  }, [response]);
+  }, [response, isJsonResponse]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50 dark:from-slate-900 dark:via-slate-800 dark:to-cyan-950 overflow-x-hidden">
@@ -718,7 +724,8 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
                               <div className="h-full bg-slate-100 dark:bg-slate-900">
                                 <SyntaxHighlighter
                                   language={detectLanguage()}
-                                  style={isDark ? brightDarkTheme : brightLightTheme}
+                                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                  style={isDark ? brightDarkTheme : brightLightTheme as any}
                                   customStyle={{
                                     margin: 0,
                                     padding: '16px',

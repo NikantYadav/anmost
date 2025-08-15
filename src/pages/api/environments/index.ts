@@ -55,9 +55,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const environment = await withORM(async (em) => {
         const newEnvironment = em.create(Environment, {
-          name,
-          variables,
-          user
+          name: name as string,
+          variables: variables as { key: string; value: string; enabled: boolean }[],
+          user,
+          createdAt: new Date(),
+          updatedAt: new Date()
         });
 
         await em.persistAndFlush(newEnvironment);

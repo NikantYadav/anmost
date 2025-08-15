@@ -7,11 +7,7 @@ interface Variable {
   enabled: boolean;
 }
 
-interface Environment {
-  id: string;
-  name: string;
-  variables: Variable[];
-}
+// Environment interface is used from useEnvironments hook
 
 interface EnvironmentManagerProps {
   onClose: () => void;

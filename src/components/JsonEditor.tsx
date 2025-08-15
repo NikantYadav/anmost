@@ -62,7 +62,7 @@ export default function JsonEditor({ value, onChange, placeholder = '{\n  "key":
       const parsed = JSON.parse(value);
       const formatted = JSON.stringify(parsed, null, 2);
       onChange(formatted);
-    } catch (e) {
+    } catch {
       // If invalid JSON, don't format
     }
   };
@@ -74,7 +74,7 @@ export default function JsonEditor({ value, onChange, placeholder = '{\n  "key":
       const parsed = JSON.parse(value);
       const minified = JSON.stringify(parsed);
       onChange(minified);
-    } catch (e) {
+    } catch {
       // If invalid JSON, don't minify
     }
   };
@@ -146,7 +146,8 @@ export default function JsonEditor({ value, onChange, placeholder = '{\n  "key":
         <div className="absolute inset-0 overflow-auto pointer-events-none">
           <SyntaxHighlighter
             language="json"
-            style={isDark ? brightDarkTheme : brightLightTheme}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            style={isDark ? brightDarkTheme : brightLightTheme as any}
             customStyle={{
               margin: 0,
               padding: '12px',

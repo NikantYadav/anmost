@@ -1,9 +1,19 @@
 import React, { useState } from 'react';
 
+interface Request {
+  id: string;
+  name: string;
+  method: string;
+  url: string;
+  headers: { key: string; value: string; enabled: boolean }[];
+  body: string;
+  bodyType: 'json' | 'form-data' | 'x-www-form-urlencoded' | 'raw' | 'binary';
+}
+
 interface Collection {
   id: string;
   name: string;
-  requests: any[];
+  requests: Request[];
 }
 
 interface Environment {
@@ -25,7 +35,10 @@ export default function ImportExport({ collections, environments, onImport, onCl
   const [exportType, setExportType] = useState<'collections' | 'environments' | 'all'>('all');
 
   const handleExport = () => {
-    let dataToExport: any = {};
+    const dataToExport: {
+      collections?: Collection[];
+      environments?: Environment[];
+    } = {};
     
     if (exportType === 'collections' || exportType === 'all') {
       dataToExport.collections = collections;
@@ -64,7 +77,7 @@ export default function ImportExport({ collections, environments, onImport, onCl
       onImport(data);
       setImportData('');
       onClose();
-    } catch (error) {
+    } catch {
       alert('Invalid JSON format. Please check your data and try again.');
     }
   };
@@ -131,7 +144,7 @@ export default function ImportExport({ collections, environments, onImport, onCl
                       name="exportType"
                       value="all"
                       checked={exportType === 'all'}
-                      onChange={(e) => setExportType(e.target.value as any)}
+                      onChange={(e) => setExportType(e.target.value as 'collections' | 'environments' | 'all')}
                       className="mr-3"
                     />
                     <span className="text-gray-700 dark:text-gray-300">Export All (Collections + Environments)</span>
@@ -142,7 +155,7 @@ export default function ImportExport({ collections, environments, onImport, onCl
                       name="exportType"
                       value="collections"
                       checked={exportType === 'collections'}
-                      onChange={(e) => setExportType(e.target.value as any)}
+                      onChange={(e) => setExportType(e.target.value as 'collections' | 'environments' | 'all')}
                       className="mr-3"
                     />
                     <span className="text-gray-700 dark:text-gray-300">Collections Only</span>
@@ -153,7 +166,7 @@ export default function ImportExport({ collections, environments, onImport, onCl
                       name="exportType"
                       value="environments"
                       checked={exportType === 'environments'}
-                      onChange={(e) => setExportType(e.target.value as any)}
+                      onChange={(e) => setExportType(e.target.value as 'collections' | 'environments' | 'all')}
                       className="mr-3"
                     />
                     <span className="text-gray-700 dark:text-gray-300">Environments Only</span>

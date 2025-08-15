@@ -98,6 +98,7 @@ export function useCollections() {
 
   return {
     collections,
+    setCollections, // Export this function so ClientInterface can use it
     loading,
     error,
     fetchCollections,

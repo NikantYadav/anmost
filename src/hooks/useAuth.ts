@@ -46,7 +46,7 @@ export function useAuth() {
             });
           }
         });
-      } catch (error) {
+      } catch {
         localStorage.removeItem('token');
         localStorage.removeItem('rest-client-user');
         setAuthState({

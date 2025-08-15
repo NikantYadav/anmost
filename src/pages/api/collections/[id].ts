@@ -54,7 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         existingCollection.name = name;
 
         // Check for duplicate request names
-        const requestNames = requests.map(r => r.name);
+        const requestNames = requests.map((r: { name: string }) => r.name);
         const uniqueNames = new Set(requestNames);
         if (requestNames.length !== uniqueNames.size) {
           throw new Error('Duplicate request names are not allowed within the same collection');
@@ -96,21 +96,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
 
       res.json(formattedCollection);
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
       console.error('Error updating collection:', error);
       
+      const errorMessage = error instanceof Error ? error.message : '';
+      
       // Handle duplicate request names
-      if (error.message && error.message.includes('Duplicate request names')) {
-        return res.status(400).json({ error: error.message });
+      if (errorMessage && errorMessage.includes('Duplicate request names')) {
+        return res.status(400).json({ error: errorMessage });
       }
       
       // Handle duplicate collection name error
-      if (error.message && error.message.includes('already exists')) {
-        return res.status(409).json({ error: error.message });
+      if (errorMessage && errorMessage.includes('already exists')) {
+        return res.status(409).json({ error: errorMessage });
       }
       
       // Handle unique constraint violation
-      if (error.message && error.message.includes('UNIQUE constraint failed')) {
+      if (errorMessage && errorMessage.includes('UNIQUE constraint failed')) {
         return res.status(409).json({ error: `Collection "${name}" already exists` });
       }
       

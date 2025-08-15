@@ -90,7 +90,7 @@ export function validateUrl(url: string): UrlValidationResult {
       isValid: true,
       canBeUsed: true
     };
-  } catch (error) {
+  } catch {
     return {
       isValid: false,
       canBeUsed: false,

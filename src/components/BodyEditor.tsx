@@ -11,7 +11,6 @@ interface BodyEditorProps {
 
 export default function BodyEditor({ value, onChange, bodyType, className = '' }: BodyEditorProps) {
   const [isValid, setIsValid] = useState(true);
-  const [error, setError] = useState('');
   const [isDark, setIsDark] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -37,7 +36,6 @@ export default function BodyEditor({ value, onChange, bodyType, className = '' }
   useEffect(() => {
     if (!value.trim()) {
       setIsValid(true);
-      setError('');
       return;
     }
 
@@ -45,14 +43,11 @@ export default function BodyEditor({ value, onChange, bodyType, className = '' }
       try {
         JSON.parse(value);
         setIsValid(true);
-        setError('');
-      } catch (e) {
+      } catch {
         setIsValid(false);
-        setError((e as Error).message);
       }
     } else {
       setIsValid(true);
-      setError('');
     }
   }, [value, bodyType]);
 
@@ -68,7 +63,7 @@ export default function BodyEditor({ value, onChange, bodyType, className = '' }
         const parsed = JSON.parse(value);
         const formatted = JSON.stringify(parsed, null, 2);
         onChange(formatted);
-      } catch (e) {
+      } catch {
         // If invalid JSON, don't format
       }
     } else if (bodyType === 'x-www-form-urlencoded' || bodyType === 'form-data') {
@@ -79,7 +74,7 @@ export default function BodyEditor({ value, onChange, bodyType, className = '' }
           .map(([key, val]) => `${key}=${val}`)
           .join('\n');
         onChange(formatted);
-      } catch (e) {
+      } catch {
         // If invalid, don't format
       }
     }
@@ -93,7 +88,7 @@ export default function BodyEditor({ value, onChange, bodyType, className = '' }
         const parsed = JSON.parse(value);
         const minified = JSON.stringify(parsed);
         onChange(minified);
-      } catch (e) {
+      } catch {
         // If invalid JSON, don't minify
       }
     } else if (bodyType === 'x-www-form-urlencoded' || bodyType === 'form-data') {
@@ -244,7 +239,8 @@ export default function BodyEditor({ value, onChange, bodyType, className = '' }
               <SyntaxHighlighter
                 className="syntax-highlighter"
                 language={getLanguage()}
-                style={isDark ? brightDarkTheme : brightLightTheme}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                style={isDark ? brightDarkTheme : brightLightTheme as any}
                 customStyle={{
                   margin: 0,
                   padding: '12px',

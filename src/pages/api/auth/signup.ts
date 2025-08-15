@@ -31,9 +31,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Create new user
     const hashedPassword = await hashPassword(password);
     const user = em.create(User, {
-      email,
+      email: email as string,
       password: hashedPassword,
-      name,
+      name: name as string,
+      createdAt: new Date(),
+      updatedAt: new Date()
     });
 
     await em.persistAndFlush(user);
@@ -50,8 +52,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         name: user.name,
       },
     });
-  } catch (error: any) {
+  } catch (error: Error | unknown) {
     console.error('Signup error:', error);
-    res.status(500).json({ message: 'Internal server error', error: error.message });
+    res.status(500).json({ 
+      message: 'Internal server error', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
   }
 }

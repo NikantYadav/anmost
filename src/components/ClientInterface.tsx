@@ -4,11 +4,13 @@ import RequestHistory from './RequestHistory';
 import CodeGenerator from './CodeGenerator';
 import ImportExport from './ImportExport';
 import ResponseViewer from './ResponseViewer';
+import BodyEditor from './BodyEditor';
 import { useCollections } from '../hooks/useCollections';
 import { useEnvironments } from '../hooks/useEnvironments';
 import { useHistory } from '../hooks/useHistory';
 import { useApi } from '../hooks/useApi';
 import { validateUrl, formatUrl } from '../utils/validation';
+import { detectMimeType, generateFilename, createDownloadBlob, downloadBlob, getMimeTypeIcon } from '../utils/mimeTypes';
 
 // Types
 interface Request {
@@ -103,7 +105,28 @@ export default function ClientInterface({ user, onLogout }: ClientInterfaceProps
   const [saveCollectionName, setSaveCollectionName] = useState('Default');
   const [saveError, setSaveError] = useState('');
 
+  // Theme state
+  const [isDark, setIsDark] = useState(false);
+
   // Data is now loaded automatically by the hooks
+
+  // Detect theme changes
+  useEffect(() => {
+    const checkTheme = () => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    };
+    
+    checkTheme();
+    
+    // Watch for theme changes
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
 
   // Replace environment variables in text
   const replaceVariables = (text: string): string => {
@@ -705,12 +728,13 @@ return (
                     ))}
                   </div>
                   
-                  <textarea
-                    value={currentRequest.body}
-                    onChange={(e) => setCurrentRequest(prev => ({ ...prev, body: e.target.value }))}
-                    placeholder={currentRequest.bodyType === 'json' ? '{\n  "key": "value"\n}' : 'Request body...'}
-                    className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white code text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
-                  />
+                  <div className="flex-1 border border-slate-300 dark:border-slate-600 rounded overflow-hidden">
+                    <BodyEditor
+                      value={currentRequest.body}
+                      onChange={(value) => setCurrentRequest(prev => ({ ...prev, body: value }))}
+                      bodyType={currentRequest.bodyType}
+                    />
+                  </div>
                 </div>
               )}
             </div>

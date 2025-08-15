@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { brightLightTheme, brightDarkTheme } from '../utils/syntaxThemes';
+import { detectMimeType, generateFilename, createDownloadBlob, downloadBlob, getMimeTypeIcon } from '../utils/mimeTypes';
 
 interface ResponseData {
   status: number;
@@ -19,6 +22,25 @@ interface ResponseViewerProps {
 export default function ResponseViewer({ response, activeTab, onTabChange }: ResponseViewerProps) {
   const [bodyFormat, setBodyFormat] = useState<'pretty' | 'raw' | 'rendered'>('pretty');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDark, setIsDark] = useState(false);
+
+  // Detect theme changes
+  useEffect(() => {
+    const checkTheme = () => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    };
+    
+    checkTheme();
+    
+    // Watch for theme changes
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
 
   // Auto-detect content type and set appropriate default format
   useEffect(() => {
@@ -76,6 +98,32 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
            response.data.trim().startsWith('<?xml');
   };
 
+  const detectLanguage = () => {
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    const trimmedData = response.data.trim();
+    
+    // Check content type first
+    if (contentType.toLowerCase().includes('json')) return 'json';
+    if (contentType.toLowerCase().includes('xml')) return 'xml';
+    if (contentType.toLowerCase().includes('html')) return 'html';
+    if (contentType.toLowerCase().includes('css')) return 'css';
+    if (contentType.toLowerCase().includes('javascript')) return 'javascript';
+    if (contentType.toLowerCase().includes('yaml')) return 'yaml';
+    
+    // Check content patterns
+    if (isJsonResponse()) return 'json';
+    if (trimmedData.startsWith('<?xml') || trimmedData.startsWith('<xml')) return 'xml';
+    if (trimmedData.toLowerCase().startsWith('<!doctype html') || trimmedData.toLowerCase().startsWith('<html')) return 'html';
+    if (trimmedData.startsWith('---') && trimmedData.includes('\n')) return 'yaml';
+    
+    // Default to text
+    return 'text';
+  };
+
   const highlightSearchTerm = (text: string, term: string): string => {
     if (!term) return text;
     const regex = new RegExp(`(${term})`, 'gi');
@@ -101,6 +149,35 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
     }
   };
 
+  // MIME type detection and download functionality
+  const getMimeTypeInfo = () => {
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    return detectMimeType(contentType);
+  };
+
+  const handleDownload = () => {
+    const mimeInfo = getMimeTypeInfo();
+    const filename = generateFilename(response.headers['x-original-url'] || 'download', mimeInfo);
+    const blob = createDownloadBlob(response.data, mimeInfo);
+    downloadBlob(blob, filename);
+  };
+
+  const isDownloadable = () => {
+    const mimeInfo = getMimeTypeInfo();
+    return mimeInfo.isDownloadable && (
+      mimeInfo.category === 'document' || 
+      mimeInfo.category === 'image' || 
+      mimeInfo.category === 'video' || 
+      mimeInfo.category === 'audio' || 
+      mimeInfo.category === 'archive' ||
+      (mimeInfo.category === 'binary' && response.data.includes('Base64: '))
+    );
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Response Status Bar */}
@@ -115,14 +192,38 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
           <span className="text-sm text-gray-600 dark:text-gray-400">
             {(response.size / 1024).toFixed(2)}KB
           </span>
+          {/* MIME Type Info */}
+          {(() => {
+            const mimeInfo = getMimeTypeInfo();
+            return (
+              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <span>{getMimeTypeIcon(mimeInfo.category)}</span>
+                <span title={mimeInfo.type}>{mimeInfo.description}</span>
+              </div>
+            );
+          })()}
         </div>
         
-        <button
-          onClick={() => copyToClipboard(response.data)}
-          className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded"
-        >
-          Copy Response
-        </button>
+        <div className="flex items-center gap-2">
+          {isDownloadable() && (
+            <button
+              onClick={handleDownload}
+              className="px-3 py-1 text-sm bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-1"
+              title="Download file"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Download
+            </button>
+          )}
+          <button
+            onClick={() => copyToClipboard(response.data)}
+            className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded"
+          >
+            Copy Response
+          </button>
+        </div>
       </div>
 
       {/* Response Tabs */}
@@ -154,9 +255,9 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
             {/* Body Controls */}
             <div className="flex items-center justify-between mb-3 flex-shrink-0">
               <div className="flex items-center gap-3">
-                {(isJsonResponse() || isHtmlResponse()) && (
+                {(detectLanguage() !== 'text' || isHtmlResponse()) && (
                   <div className="flex items-center gap-2">
-                    {isJsonResponse() && (
+                    {detectLanguage() !== 'text' && (
                       <button
                         onClick={() => setBodyFormat('pretty')}
                         className={`px-3 py-1 text-sm rounded ${
@@ -204,10 +305,11 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
             </div>
 
             {/* Response Body - Scrollable container */}
-            <div className="flex-1 min-h-0 border rounded bg-gray-100 dark:bg-gray-900 overflow-hidden">
+            <div className="flex-1 min-h-0 border rounded bg-gray-100 dark:bg-gray-900 overflow-hidden"
+                 style={{ minHeight: '300px' }}>
               {bodyFormat === 'rendered' && isHtmlResponse() ? (
-                <div className="h-full flex flex-col">
-                  <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 text-sm text-yellow-800 dark:text-yellow-200">
+                <div className="h-full flex flex-col bg-gray-100 dark:bg-gray-900">
+                  <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 text-sm text-yellow-800 dark:text-yellow-200 flex-shrink-0">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -223,10 +325,10 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
                       </button>
                     </div>
                   </div>
-                  <div className="flex-1 bg-white relative">
+                  <div className="flex-1 bg-white relative overflow-hidden">
                     <iframe
                       srcDoc={response.data}
-                      className="w-full h-full border-0"
+                      className="w-full h-full border-0 bg-white"
                       sandbox="allow-same-origin allow-scripts"
                       title="Rendered HTML Response"
                       onError={() => {
@@ -235,21 +337,40 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
                     />
                   </div>
                 </div>
-              ) : (
-                <pre className="h-full p-4 overflow-auto text-sm font-mono whitespace-pre-wrap break-words overflow-wrap-anywhere">
-                  <code 
-                    className="text-gray-800 dark:text-gray-200 block"
-                    style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
-                    dangerouslySetInnerHTML={{
-                      __html: highlightSearchTerm(
-                        bodyFormat === 'pretty' && isJsonResponse() 
-                          ? formatJson(response.data) 
-                          : response.data,
-                        searchTerm
-                      )
+              ) : bodyFormat === 'pretty' && detectLanguage() !== 'text' ? (
+                <div className="h-full bg-gray-100 dark:bg-gray-900">
+                  <SyntaxHighlighter
+                    language={detectLanguage()}
+                    style={isDark ? brightDarkTheme : brightLightTheme}
+                    customStyle={{
+                      margin: 0,
+                      padding: '16px',
+                      background: 'transparent',
+                      fontSize: '14px',
+                      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                      lineHeight: '1.5',
+                      height: '100%',
+                      overflow: 'auto'
                     }}
-                  />
-                </pre>
+                    showLineNumbers={true}
+                    wrapLines={true}
+                    wrapLongLines={true}
+                  >
+                    {detectLanguage() === 'json' ? formatJson(response.data) : response.data}
+                  </SyntaxHighlighter>
+                </div>
+              ) : (
+                <div className="h-full bg-gray-100 dark:bg-gray-900">
+                  <pre className="h-full p-4 overflow-auto text-sm font-mono whitespace-pre-wrap break-words overflow-wrap-anywhere bg-transparent">
+                    <code 
+                      className="text-gray-800 dark:text-gray-200 block bg-transparent"
+                      style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                      dangerouslySetInnerHTML={{
+                        __html: highlightSearchTerm(response.data, searchTerm)
+                      }}
+                    />
+                  </pre>
+                </div>
               )}
             </div>
           </div>

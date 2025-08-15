@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { brightLightTheme, brightDarkTheme } from '../utils/syntaxThemes';
 
 interface Request {
   method: string;
@@ -26,6 +28,25 @@ const languages = [
 export default function CodeGenerator({ request, onClose }: CodeGeneratorProps) {
   const [selectedLanguage, setSelectedLanguage] = useState('curl');
   const [copied, setCopied] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+
+  // Detect theme changes
+  useEffect(() => {
+    const checkTheme = () => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    };
+    
+    checkTheme();
+    
+    // Watch for theme changes
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
 
   const generateCode = (language: string): string => {
     const { method, url, headers, body } = request;
@@ -184,6 +205,20 @@ export default function CodeGenerator({ request, onClose }: CodeGeneratorProps) 
     return labels[lang] || lang;
   };
 
+  const getSyntaxLanguage = (lang: string): string => {
+    const syntaxMap: Record<string, string> = {
+      'curl': 'bash',
+      'javascript-fetch': 'javascript',
+      'javascript-axios': 'javascript',
+      'python-requests': 'python',
+      'node-axios': 'javascript',
+      'php-curl': 'php',
+      'java-okhttp': 'java',
+      'csharp-httpclient': 'csharp'
+    };
+    return syntaxMap[lang] || 'text';
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl h-3/4 flex flex-col">
@@ -238,12 +273,24 @@ export default function CodeGenerator({ request, onClose }: CodeGeneratorProps) 
               </button>
             </div>
 
-            <div className="flex-1 p-4 overflow-auto">
-              <pre className="bg-gray-100 dark:bg-gray-900 p-4 rounded text-sm font-mono overflow-auto h-full">
-                <code className="text-gray-800 dark:text-gray-200">
-                  {generateCode(selectedLanguage)}
-                </code>
-              </pre>
+            <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900">
+              <SyntaxHighlighter
+                language={getSyntaxLanguage(selectedLanguage)}
+                style={isDark ? brightDarkTheme : brightLightTheme}
+                customStyle={{
+                  margin: 0,
+                  padding: '16px',
+                  background: 'transparent',
+                  fontSize: '14px',
+                  lineHeight: '1.5',
+                  height: '100%',
+                  overflow: 'auto'
+                }}
+                wrapLines={true}
+                wrapLongLines={true}
+              >
+                {generateCode(selectedLanguage)}
+              </SyntaxHighlighter>
             </div>
           </div>
         </div>

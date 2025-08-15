@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import CodeGenerator from './CodeGenerator';
 import { useApi } from '../hooks/useApi';
 import { validateUrl, formatUrl } from '../utils/validation';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { brightLightTheme, brightDarkTheme } from '../utils/syntaxThemes';
+import BodyEditor from './BodyEditor';
+import { detectMimeType, generateFilename, createDownloadBlob, downloadBlob, getMimeTypeIcon } from '../utils/mimeTypes';
 
 interface LandingPageProps {
   onSignIn: () => void;
@@ -44,7 +48,29 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
   const [error, setError] = useState('');
   const [urlError, setUrlError] = useState('');
   const [activeRequestTab, setActiveRequestTab] = useState<'headers' | 'body'>('headers');
+  const [activeResponseTab, setActiveResponseTab] = useState<'body' | 'headers'>('body');
+  const [bodyFormat, setBodyFormat] = useState<'pretty' | 'raw' | 'rendered'>('pretty');
+  const [searchTerm, setSearchTerm] = useState('');
   const [showCodeGenerator, setShowCodeGenerator] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+
+  // Detect theme changes
+  useEffect(() => {
+    const checkTheme = () => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    };
+    
+    checkTheme();
+    
+    // Watch for theme changes
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
 
   const handleSend = async () => {
     setLoading(true);
@@ -137,6 +163,143 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
     return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30';
   };
 
+  const formatJson = (jsonString: string): string => {
+    try {
+      const parsed = JSON.parse(jsonString);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return jsonString;
+    }
+  };
+
+  const isJsonResponse = () => {
+    if (!response) return false;
+    try {
+      JSON.parse(response.data);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const isHtmlResponse = () => {
+    if (!response) return false;
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    return contentType.toLowerCase().includes('text/html') || 
+           response.data.trim().toLowerCase().startsWith('<!doctype html') ||
+           response.data.trim().toLowerCase().startsWith('<html');
+  };
+
+  const isXmlResponse = () => {
+    if (!response) return false;
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    return contentType.toLowerCase().includes('xml') || 
+           response.data.trim().startsWith('<?xml');
+  };
+
+  const detectLanguage = () => {
+    if (!response) return 'text';
+    
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    const trimmedData = response.data.trim();
+    
+    // Check content type first
+    if (contentType.toLowerCase().includes('json')) return 'json';
+    if (contentType.toLowerCase().includes('xml')) return 'xml';
+    if (contentType.toLowerCase().includes('html')) return 'html';
+    if (contentType.toLowerCase().includes('css')) return 'css';
+    if (contentType.toLowerCase().includes('javascript')) return 'javascript';
+    if (contentType.toLowerCase().includes('yaml')) return 'yaml';
+    
+    // Check content patterns
+    if (isJsonResponse()) return 'json';
+    if (trimmedData.startsWith('<?xml') || trimmedData.startsWith('<xml')) return 'xml';
+    if (trimmedData.toLowerCase().startsWith('<!doctype html') || trimmedData.toLowerCase().startsWith('<html')) return 'html';
+    if (trimmedData.startsWith('---') && trimmedData.includes('\n')) return 'yaml';
+    
+    // Default to text
+    return 'text';
+  };
+
+  const highlightSearchTerm = (text: string, term: string): string => {
+    if (!term) return text;
+    const regex = new RegExp(`(${term})`, 'gi');
+    return text.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800">$1</mark>');
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
+  };
+
+  // MIME type detection and download functionality
+  const getMimeTypeInfo = () => {
+    if (!response) return null;
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    return detectMimeType(contentType);
+  };
+
+  const handleDownload = () => {
+    if (!response) return;
+    const mimeInfo = getMimeTypeInfo();
+    if (!mimeInfo) return;
+    
+    const filename = generateFilename(response.headers['x-original-url'] || currentRequest.url || 'download', mimeInfo);
+    const blob = createDownloadBlob(response.data, mimeInfo);
+    downloadBlob(blob, filename);
+  };
+
+  const isDownloadable = () => {
+    const mimeInfo = getMimeTypeInfo();
+    if (!mimeInfo || !response) return false;
+    
+    return mimeInfo.isDownloadable && (
+      mimeInfo.category === 'document' || 
+      mimeInfo.category === 'image' || 
+      mimeInfo.category === 'video' || 
+      mimeInfo.category === 'audio' || 
+      mimeInfo.category === 'archive' ||
+      (mimeInfo.category === 'binary' && response.data.includes('Base64: '))
+    );
+  };
+
+  // Auto-detect content type and set appropriate default format
+  useEffect(() => {
+    if (!response) return;
+    
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    if (contentType.toLowerCase().includes('text/html')) {
+      setBodyFormat('rendered');
+    } else if (contentType.toLowerCase().includes('application/json') || isJsonResponse()) {
+      setBodyFormat('pretty');
+    } else {
+      setBodyFormat('raw');
+    }
+  }, [response]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50 dark:from-slate-900 dark:via-slate-800 dark:to-cyan-950 overflow-x-hidden">
       {/* Hero Section */}
@@ -180,7 +343,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
                   onClick={onSignIn}
                   className="px-6 py-2 bg-white text-cyan-600 hover:bg-cyan-50 rounded-lg button-text transition-colors"
                 >
-                  Sign Up
+                  Sign In
                 </button>
               </div>
             </div>
@@ -371,12 +534,13 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
                       ))}
                     </div>
 
-                    <textarea
-                      value={currentRequest.body}
-                      onChange={(e) => setCurrentRequest(prev => ({ ...prev, body: e.target.value }))}
-                      placeholder={currentRequest.bodyType === 'json' ? '{\n  "key": "value"\n}' : 'Request body...'}
-                      className="w-full h-32 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white code text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                    />
+                    <div className="border border-slate-300 dark:border-slate-600 rounded overflow-hidden h-32">
+                      <BodyEditor
+                        value={currentRequest.body}
+                        onChange={(value) => setCurrentRequest(prev => ({ ...prev, body: value }))}
+                        bodyType={currentRequest.bodyType}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -393,7 +557,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
 
                 {response && (
                   <div className="space-y-3 flex flex-col flex-grow">
-                    {/* Response Status */}
+                    {/* Response Status Bar */}
                     <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
                       <div className="flex items-center gap-4">
                         <span className={`px-3 py-1 rounded font-medium ${getStatusColor(response.status)}`}>
@@ -405,19 +569,249 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
                         <span className="body-sm text-slate-600 dark:text-slate-400 code">
                           {(response.size / 1024).toFixed(2)}KB
                         </span>
+                        {/* MIME Type Info */}
+                        {(() => {
+                          const mimeInfo = getMimeTypeInfo();
+                          return mimeInfo ? (
+                            <div className="flex items-center gap-2 body-sm text-slate-600 dark:text-slate-400">
+                              <span>{getMimeTypeIcon(mimeInfo.category)}</span>
+                              <span title={mimeInfo.type}>{mimeInfo.description}</span>
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        {isDownloadable() && (
+                          <button
+                            onClick={handleDownload}
+                            className="px-3 py-1 text-sm bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-1"
+                            title="Download file"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Download
+                          </button>
+                        )}
+                        <button
+                          onClick={() => copyToClipboard(response.data)}
+                          className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded"
+                        >
+                          Copy Response
+                        </button>
                       </div>
                     </div>
 
-                    {/* Response Body - Fixed height with internal scrolling */}
-                    <div className="border rounded-lg bg-slate-100 dark:bg-slate-900 h-[400px] overflow-hidden response-container">
-                      <pre className="h-full overflow-auto p-4 text-sm code whitespace-pre-wrap break-words overflow-wrap-anywhere">
-                        <code 
-                          className="text-slate-800 dark:text-slate-200 block"
-                          style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                    {/* Response Tabs */}
+                    <div className="flex border-b border-slate-200 dark:border-slate-700">
+                      {(['body', 'headers'] as const).map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveResponseTab(tab)}
+                          className={`px-4 py-2 capitalize ${
+                            activeResponseTab === tab
+                              ? 'border-b-2 border-blue-500 text-blue-600'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                          }`}
                         >
-                          {response.data}
-                        </code>
-                      </pre>
+                          {tab}
+                          {tab === 'headers' && (
+                            <span className="ml-2 px-2 py-1 text-xs bg-slate-200 dark:bg-slate-700 rounded">
+                              {Object.keys(response.headers).length}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Response Content */}
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      {activeResponseTab === 'body' && (
+                        <div className="flex flex-col h-full">
+                          {/* Body Controls */}
+                          <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                            <div className="flex items-center gap-3">
+                              {(detectLanguage() !== 'text' || isHtmlResponse()) && (
+                                <div className="flex items-center gap-2">
+                                  {detectLanguage() !== 'text' && (
+                                    <button
+                                      onClick={() => setBodyFormat('pretty')}
+                                      className={`px-3 py-1 text-sm rounded ${
+                                        bodyFormat === 'pretty'
+                                          ? 'bg-blue-600 text-white'
+                                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                      }`}
+                                    >
+                                      Pretty
+                                    </button>
+                                  )}
+                                  {isHtmlResponse() && (
+                                    <button
+                                      onClick={() => setBodyFormat('rendered')}
+                                      className={`px-3 py-1 text-sm rounded ${
+                                        bodyFormat === 'rendered'
+                                          ? 'bg-blue-600 text-white'
+                                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                      }`}
+                                    >
+                                      Rendered
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => setBodyFormat('raw')}
+                                    className={`px-3 py-1 text-sm rounded ${
+                                      bodyFormat === 'raw'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    Raw
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <input
+                              type="text"
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              placeholder="Search in response..."
+                              className="px-3 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                            />
+                          </div>
+
+                          {/* Response Body - Fixed height with internal scrolling */}
+                          <div className="flex-1 min-h-0 border rounded-lg bg-slate-100 dark:bg-slate-900 overflow-hidden"
+                               style={{ minHeight: '300px' }}>
+                            {bodyFormat === 'rendered' && isHtmlResponse() ? (
+                              <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-900">
+                                <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 text-sm text-yellow-800 dark:text-yellow-200 flex-shrink-0">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                      </svg>
+                                      <span>Rendered HTML Preview - External resources may not load due to security restrictions</span>
+                                    </div>
+                                    <button
+                                      onClick={() => setBodyFormat('raw')}
+                                      className="px-2 py-1 text-xs bg-yellow-200 dark:bg-yellow-800 hover:bg-yellow-300 dark:hover:bg-yellow-700 rounded text-yellow-900 dark:text-yellow-100"
+                                    >
+                                      View Source
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex-1 bg-white relative overflow-hidden">
+                                  <iframe
+                                    srcDoc={response.data}
+                                    className="w-full h-full border-0 bg-white"
+                                    sandbox="allow-same-origin allow-scripts"
+                                    title="Rendered HTML Response"
+                                    onError={() => {
+                                      console.warn('Failed to render HTML content');
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ) : bodyFormat === 'pretty' && detectLanguage() !== 'text' ? (
+                              <div className="h-full bg-slate-100 dark:bg-slate-900">
+                                <SyntaxHighlighter
+                                  language={detectLanguage()}
+                                  style={isDark ? brightDarkTheme : brightLightTheme}
+                                  customStyle={{
+                                    margin: 0,
+                                    padding: '16px',
+                                    background: 'transparent',
+                                    fontSize: '14px',
+                                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                                    lineHeight: '1.5',
+                                    height: '100%',
+                                    overflow: 'auto'
+                                  }}
+                                  showLineNumbers={true}
+                                  wrapLines={true}
+                                  wrapLongLines={true}
+                                >
+                                  {detectLanguage() === 'json' ? formatJson(response.data) : response.data}
+                                </SyntaxHighlighter>
+                              </div>
+                            ) : (
+                              <div className="h-full bg-slate-100 dark:bg-slate-900">
+                                <pre className="h-full p-4 overflow-auto text-sm code whitespace-pre-wrap break-words overflow-wrap-anywhere bg-transparent">
+                                  <code 
+                                    className="text-slate-800 dark:text-slate-200 block bg-transparent"
+                                    style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                                    dangerouslySetInnerHTML={{
+                                      __html: highlightSearchTerm(response.data, searchTerm)
+                                    }}
+                                  />
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {activeResponseTab === 'headers' && (
+                        <div className="flex flex-col h-full">
+                          {/* Headers Search */}
+                          <div className="mb-3 flex-shrink-0">
+                            <input
+                              type="text"
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              placeholder="Search headers..."
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                            />
+                          </div>
+
+                          {/* Headers List */}
+                          <div className="flex-1 min-h-0 overflow-auto border rounded bg-slate-100 dark:bg-slate-900 p-2">
+                            {Object.entries(response.headers).filter(([key, value]) =>
+                              key.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              value.toLowerCase().includes(searchTerm.toLowerCase())
+                            ).length === 0 ? (
+                              <div className="text-center text-slate-500 dark:text-slate-400 py-8">
+                                No headers match your search
+                              </div>
+                            ) : (
+                              Object.entries(response.headers).filter(([key, value]) =>
+                                key.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                value.toLowerCase().includes(searchTerm.toLowerCase())
+                              ).map(([key, value]) => (
+                                <div key={key} className="flex gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded mb-2">
+                                  <div className="font-medium text-slate-700 dark:text-slate-300 min-w-0 flex-shrink-0">
+                                    <span 
+                                      dangerouslySetInnerHTML={{
+                                        __html: highlightSearchTerm(key, searchTerm)
+                                      }}
+                                    />
+                                    :
+                                  </div>
+                                  <div className="text-slate-600 dark:text-slate-400 min-w-0 flex-1 break-all overflow-wrap-anywhere">
+                                    <span 
+                                      style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                                      dangerouslySetInnerHTML={{
+                                        __html: highlightSearchTerm(value, searchTerm)
+                                      }}
+                                    />
+                                  </div>
+                                  <button
+                                    onClick={() => copyToClipboard(`${key}: ${value}`)}
+                                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex-shrink-0"
+                                    title="Copy header"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div> 
                 )}

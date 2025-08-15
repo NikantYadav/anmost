@@ -137,15 +137,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (contentType.includes('application/json')) {
           const jsonData = await response.json();
           responseData = JSON.stringify(jsonData, null, 2);
-        } else if (contentType.includes('text/') || contentType.includes('application/xml')) {
+        } else if (contentType.includes('text/') || 
+                   contentType.includes('application/xml') || 
+                   contentType.includes('application/javascript') ||
+                   contentType.includes('application/xhtml+xml')) {
           responseData = await response.text();
         } else {
-          // For binary data, convert to base64 or indicate binary content
+          // For binary data, convert to base64 for download capability
           const buffer = await response.arrayBuffer();
-          if (buffer.byteLength > 1024 * 1024) { // 1MB limit
-            responseData = `[Binary data - ${buffer.byteLength} bytes]`;
+          const sizeInMB = buffer.byteLength / (1024 * 1024);
+          
+          if (sizeInMB > 10) { // 10MB limit for base64 encoding
+            responseData = `[Binary data - ${buffer.byteLength} bytes (${sizeInMB.toFixed(2)}MB)]\n\nFile too large for preview. Use download button to save the file.`;
           } else {
-            responseData = `[Binary data - ${buffer.byteLength} bytes]\n\nBase64: ${Buffer.from(buffer).toString('base64')}`;
+            const base64Data = Buffer.from(buffer).toString('base64');
+            responseData = `[Binary data - ${buffer.byteLength} bytes (${sizeInMB.toFixed(2)}MB)]\n\nBase64: ${base64Data}`;
           }
         }
       } catch (parseError) {
@@ -159,7 +165,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(200).json({
         status: response.status,
         statusText: response.statusText,
-        headers: responseHeaders,
+        headers: {
+          ...responseHeaders,
+          'x-original-url': url, // Add original URL for filename generation
+        },
         data: responseData,
         time: endTime - startTime,
         size: responseSize,

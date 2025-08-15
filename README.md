@@ -14,6 +14,7 @@ A modern, feature-rich REST client application built with Next.js and TypeScript
 - **Collections**: Organize requests into collections for better management
 - **Environment Variables**: Define and use variables across requests with `{{variable}}` syntax
 - **Request History**: Automatic tracking of all sent requests with search and filter
+- **CORS Bypass**: Built-in proxy server to handle CORS-restricted APIs
 - **Code Generation**: Generate code snippets in 8+ programming languages:
   - cURL
   - JavaScript (Fetch & Axios)
@@ -40,6 +41,7 @@ A modern, feature-rich REST client application built with Next.js and TypeScript
 - **Styling**: Tailwind CSS
 - **State Management**: React Hooks
 - **Storage**: Browser LocalStorage
+- **Proxy Server**: Built-in Next.js API routes for CORS bypass
 - **Icons**: Heroicons
 
 ## 🚀 Getting Started
@@ -112,6 +114,12 @@ pnpm dev
 3. **Import**: Upload JSON files to restore or share data
 4. **Backup**: Keep your API testing data safe
 
+#### CORS Bypass
+- **Automatic Proxy**: All requests are automatically routed through a backend proxy
+- **No CORS Issues**: Test any API without browser CORS restrictions
+- **Transparent**: Works seamlessly without any configuration
+- **Secure**: Proxy runs on your local server, no data sent to third parties
+
 ## 🎯 Feature Tiers
 
 ### Free Tier (No Account Required)
@@ -138,6 +146,7 @@ pnpm dev
 | Environment Variables | ✅ Free account | ✅ Free account |
 | Code Generation | ✅ Free | ✅ Free |
 | Request History | ✅ Free account | ✅ Free account |
+| CORS Bypass | ✅ Built-in proxy | ❌ Desktop app only |
 | Offline Usage | ✅ Full offline | ❌ Limited offline |
 | No Download Required | ✅ Web-based | ❌ Desktop app |
 | Open Source | ✅ MIT License | ❌ Proprietary |

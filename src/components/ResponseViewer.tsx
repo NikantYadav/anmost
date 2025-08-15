@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface ResponseData {
   status: number;
@@ -7,6 +7,7 @@ interface ResponseData {
   data: string;
   time: number;
   size: number;
+  contentType?: string;
 }
 
 interface ResponseViewerProps {
@@ -16,8 +17,24 @@ interface ResponseViewerProps {
 }
 
 export default function ResponseViewer({ response, activeTab, onTabChange }: ResponseViewerProps) {
-  const [bodyFormat, setBodyFormat] = useState<'pretty' | 'raw'>('pretty');
+  const [bodyFormat, setBodyFormat] = useState<'pretty' | 'raw' | 'rendered'>('pretty');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Auto-detect content type and set appropriate default format
+  useEffect(() => {
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    if (contentType.toLowerCase().includes('text/html')) {
+      setBodyFormat('rendered');
+    } else if (contentType.toLowerCase().includes('application/json') || isJsonResponse()) {
+      setBodyFormat('pretty');
+    } else {
+      setBodyFormat('raw');
+    }
+  }, [response]);
 
   const formatJson = (jsonString: string): string => {
     try {
@@ -35,6 +52,28 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
     } catch {
       return false;
     }
+  };
+
+  const isHtmlResponse = () => {
+    // Use contentType from response if available, otherwise check headers
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    return contentType.toLowerCase().includes('text/html') || 
+           response.data.trim().toLowerCase().startsWith('<!doctype html') ||
+           response.data.trim().toLowerCase().startsWith('<html');
+  };
+
+  const isXmlResponse = () => {
+    const contentType = response.contentType || 
+      Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'content-type'
+      )?.[1] || '';
+    
+    return contentType.toLowerCase().includes('xml') || 
+           response.data.trim().startsWith('<?xml');
   };
 
   const highlightSearchTerm = (text: string, term: string): string => {
@@ -109,24 +148,38 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
       </div>
 
       {/* Response Content - Flexible height container */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden response-container">
         {activeTab === 'body' && (
           <div className="flex flex-col h-full">
             {/* Body Controls */}
             <div className="flex items-center justify-between mb-3 flex-shrink-0">
               <div className="flex items-center gap-3">
-                {isJsonResponse() && (
+                {(isJsonResponse() || isHtmlResponse()) && (
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setBodyFormat('pretty')}
-                      className={`px-3 py-1 text-sm rounded ${
-                        bodyFormat === 'pretty'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                      }`}
-                    >
-                      Pretty
-                    </button>
+                    {isJsonResponse() && (
+                      <button
+                        onClick={() => setBodyFormat('pretty')}
+                        className={`px-3 py-1 text-sm rounded ${
+                          bodyFormat === 'pretty'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        Pretty
+                      </button>
+                    )}
+                    {isHtmlResponse() && (
+                      <button
+                        onClick={() => setBodyFormat('rendered')}
+                        className={`px-3 py-1 text-sm rounded ${
+                          bodyFormat === 'rendered'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        Rendered
+                      </button>
+                    )}
                     <button
                       onClick={() => setBodyFormat('raw')}
                       className={`px-3 py-1 text-sm rounded ${
@@ -152,19 +205,52 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
 
             {/* Response Body - Scrollable container */}
             <div className="flex-1 min-h-0 border rounded bg-gray-100 dark:bg-gray-900 overflow-hidden">
-              <pre className="h-full p-4 overflow-auto text-sm font-mono whitespace-pre-wrap">
-                <code 
-                  className="text-gray-800 dark:text-gray-200"
-                  dangerouslySetInnerHTML={{
-                    __html: highlightSearchTerm(
-                      bodyFormat === 'pretty' && isJsonResponse() 
-                        ? formatJson(response.data) 
-                        : response.data,
-                      searchTerm
-                    )
-                  }}
-                />
-              </pre>
+              {bodyFormat === 'rendered' && isHtmlResponse() ? (
+                <div className="h-full flex flex-col">
+                  <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 text-sm text-yellow-800 dark:text-yellow-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                        <span>Rendered HTML Preview - External resources may not load due to security restrictions</span>
+                      </div>
+                      <button
+                        onClick={() => setBodyFormat('raw')}
+                        className="px-2 py-1 text-xs bg-yellow-200 dark:bg-yellow-800 hover:bg-yellow-300 dark:hover:bg-yellow-700 rounded text-yellow-900 dark:text-yellow-100"
+                      >
+                        View Source
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 bg-white relative">
+                    <iframe
+                      srcDoc={response.data}
+                      className="w-full h-full border-0"
+                      sandbox="allow-same-origin allow-scripts"
+                      title="Rendered HTML Response"
+                      onError={() => {
+                        console.warn('Failed to render HTML content');
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <pre className="h-full p-4 overflow-auto text-sm font-mono whitespace-pre-wrap break-words overflow-wrap-anywhere">
+                  <code 
+                    className="text-gray-800 dark:text-gray-200 block"
+                    style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                    dangerouslySetInnerHTML={{
+                      __html: highlightSearchTerm(
+                        bodyFormat === 'pretty' && isJsonResponse() 
+                          ? formatJson(response.data) 
+                          : response.data,
+                        searchTerm
+                      )
+                    }}
+                  />
+                </pre>
+              )}
             </div>
           </div>
         )}
@@ -199,8 +285,9 @@ export default function ResponseViewer({ response, activeTab, onTabChange }: Res
                       />
                       :
                     </div>
-                    <div className="text-gray-600 dark:text-gray-400 min-w-0 flex-1 break-all">
+                    <div className="text-gray-600 dark:text-gray-400 min-w-0 flex-1 break-all overflow-wrap-anywhere">
                       <span 
+                        style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
                         dangerouslySetInnerHTML={{
                           __html: highlightSearchTerm(value, searchTerm)
                         }}

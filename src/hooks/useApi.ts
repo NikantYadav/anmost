@@ -6,6 +6,24 @@ interface ApiOptions {
   headers?: Record<string, string>;
 }
 
+interface ProxyRequestOptions {
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  body?: string;
+  bodyType?: 'json' | 'form-data' | 'x-www-form-urlencoded' | 'raw' | 'binary';
+}
+
+interface ProxyResponse {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  data: string;
+  time: number;
+  size: number;
+  contentType?: string;
+}
+
 export function useApi() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,5 +63,32 @@ export function useApi() {
     }
   }, []);
 
-  return { apiCall, loading, error };
+  const proxyRequest = useCallback(async (options: ProxyRequestOptions): Promise<ProxyResponse> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(options),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Proxy request failed' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { apiCall, proxyRequest, loading, error };
 }

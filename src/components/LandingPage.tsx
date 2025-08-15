@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import CodeGenerator from './CodeGenerator';
+import { useApi } from '../hooks/useApi';
+import { validateUrl, formatUrl } from '../utils/validation';
 
 interface LandingPageProps {
   onSignIn: () => void;
@@ -20,12 +22,15 @@ interface ResponseData {
   data: string;
   time: number;
   size: number;
+  contentType?: string;
 }
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
 const BODY_TYPES = ['json', 'form-data', 'x-www-form-urlencoded', 'raw', 'binary'] as const;
 
 export default function LandingPage({ onSignIn }: LandingPageProps) {
+  const { proxyRequest } = useApi();
+  
   const [currentRequest, setCurrentRequest] = useState<BasicRequest>({
     method: 'GET',
     url: '',
@@ -37,17 +42,28 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
   const [response, setResponse] = useState<ResponseData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [urlError, setUrlError] = useState('');
   const [activeRequestTab, setActiveRequestTab] = useState<'headers' | 'body'>('headers');
   const [showCodeGenerator, setShowCodeGenerator] = useState(false);
 
   const handleSend = async () => {
     setLoading(true);
     setError('');
+    setUrlError('');
     setResponse(null);
 
-    const startTime = Date.now();
-
     try {
+      // Validate URL before processing
+      const urlValidation = validateUrl(currentRequest.url);
+      if (!urlValidation.canBeUsed) {
+        setUrlError(urlValidation.error || 'Invalid URL');
+        setLoading(false);
+        return;
+      }
+
+      // Use corrected URL if available
+      const validatedUrl = urlValidation.correctedUrl || currentRequest.url;
+
       const processedHeaders: Record<string, string> = {};
       currentRequest.headers.forEach(header => {
         if (header.enabled && header.key && header.value) {
@@ -55,43 +71,21 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
         }
       });
 
-      let processedBody: string | FormData | undefined;
+      let processedBody: string | undefined;
       if (['POST', 'PUT', 'PATCH'].includes(currentRequest.method)) {
         processedBody = currentRequest.body;
       }
 
-      const res = await fetch(currentRequest.url, {
+      // Use the proxy request instead of direct fetch
+      const responseObj = await proxyRequest({
         method: currentRequest.method,
+        url: validatedUrl,
         headers: processedHeaders,
         body: processedBody,
+        bodyType: currentRequest.bodyType,
       });
 
-      const endTime = Date.now();
-      const responseHeaders: Record<string, string> = {};
-      res.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      });
-
-      const contentType = res.headers.get('content-type') || '';
-      let responseData: string;
-
-      if (contentType.includes('application/json')) {
-        const jsonData = await res.json();
-        responseData = JSON.stringify(jsonData, null, 2);
-      } else {
-        responseData = await res.text();
-      }
-
-      const responseSize = new Blob([responseData]).size;
-
-      setResponse({
-        status: res.status,
-        statusText: res.statusText,
-        headers: responseHeaders,
-        data: responseData,
-        time: endTime - startTime,
-        size: responseSize
-      });
+      setResponse(responseObj);
 
     } catch (err: any) {
       setError(err.message || 'Request failed');
@@ -123,6 +117,20 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
     }));
   };
 
+  // Handle URL input with validation
+  const handleUrlChange = (value: string) => {
+    setCurrentRequest(prev => ({ ...prev, url: value }));
+    setUrlError('');
+    
+    // Real-time validation feedback (only show errors for non-empty URLs)
+    if (value.trim()) {
+      const validation = validateUrl(value);
+      if (!validation.canBeUsed) {
+        setUrlError(validation.error || 'Invalid URL');
+      }
+    }
+  };
+
   const getStatusColor = (status: number) => {
     if (status >= 200 && status < 300) return 'text-green-600 bg-green-100 dark:bg-green-900/30';
     if (status >= 400) return 'text-red-600 bg-red-100 dark:bg-red-900/30';
@@ -130,7 +138,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50 dark:from-slate-900 dark:via-slate-800 dark:to-cyan-950">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50 dark:from-slate-900 dark:via-slate-800 dark:to-cyan-950 overflow-x-hidden">
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-blue-600/10"></div>
@@ -180,7 +188,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
 
           <div className="p-6">
             {/* URL Bar */}
-            <div className="flex gap-3 mb-6">
+            <div className="flex gap-3 mb-8">
               <select
                 value={currentRequest.method}
                 onChange={(e) => setCurrentRequest(prev => ({ ...prev, method: e.target.value }))}
@@ -191,17 +199,75 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
                 ))}
               </select>
 
-              <input
-                type="text"
-                value={currentRequest.url}
-                onChange={(e) => setCurrentRequest(prev => ({ ...prev, url: e.target.value }))}
-                placeholder="https://jsonplaceholder.typicode.com/posts/1"
-                className="flex-1 px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-              />
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={currentRequest.url}
+                  onChange={(e) => handleUrlChange(e.target.value)}
+                  onBlur={(e) => {
+                    // Auto-correct URL on blur if possible
+                    const validation = validateUrl(e.target.value);
+                    if (validation.correctedUrl) {
+                      setCurrentRequest(prev => ({ ...prev, url: validation.correctedUrl! }));
+                      setUrlError('');
+                    }
+                  }}
+                  placeholder="https://jsonplaceholder.typicode.com/posts/1"
+                  className={`w-full px-4 py-3 pr-10 border rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:border-transparent ${
+                    urlError 
+                      ? 'border-red-300 dark:border-red-600 focus:ring-red-500' 
+                      : 'border-slate-300 dark:border-slate-600 focus:ring-cyan-500'
+                  }`}
+                />
+                {/* URL validation indicator */}
+                {currentRequest.url && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    {(() => {
+                      const validation = validateUrl(currentRequest.url);
+                      if (urlError || !validation.canBeUsed) {
+                        return (
+                          <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        );
+                      } else if (validation.isValid) {
+                        return (
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        );
+                      } else if (validation.correctedUrl) {
+                        return (
+                          <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                          </svg>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                )}
+                {urlError && (
+                  <div className="absolute top-full left-0 mt-1 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {urlError}
+                  </div>
+                )}
+                {!urlError && currentRequest.url && validateUrl(currentRequest.url).correctedUrl && (
+                  <div className="absolute top-full left-0 mt-1 text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    Will be auto-corrected to: {validateUrl(currentRequest.url).correctedUrl}
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={handleSend}
-                disabled={loading || !currentRequest.url}
+                disabled={loading || !currentRequest.url || !!urlError}
                 className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-lg button-text transition-all shadow-lg shadow-cyan-500/25 disabled:shadow-none"
               >
                 {loading ? (
@@ -215,7 +281,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
               {/* Request Configuration */}
               <div className="space-y-4">
                 <h3 className="heading-md text-slate-900 dark:text-white">Request Configuration</h3>
@@ -316,7 +382,7 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
               </div>
 
               {/* Response Section */}
-              <div className="space-y-4 flex flex-col h-full">
+              <div className="space-y-4 flex flex-col h-full min-w-0">
                 <h3 className="heading-md text-slate-900 dark:text-white">Response</h3>
 
                 {error && (
@@ -343,9 +409,12 @@ export default function LandingPage({ onSignIn }: LandingPageProps) {
                     </div>
 
                     {/* Response Body - Fixed height with internal scrolling */}
-                    <div className="border rounded-lg bg-slate-100 dark:bg-slate-900 h-[400px]">
-                      <pre className="h-full overflow-auto p-4 text-sm code whitespace-pre-wrap">
-                        <code className="text-slate-800 dark:text-slate-200">
+                    <div className="border rounded-lg bg-slate-100 dark:bg-slate-900 h-[400px] overflow-hidden response-container">
+                      <pre className="h-full overflow-auto p-4 text-sm code whitespace-pre-wrap break-words overflow-wrap-anywhere">
+                        <code 
+                          className="text-slate-800 dark:text-slate-200 block"
+                          style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                        >
                           {response.data}
                         </code>
                       </pre>

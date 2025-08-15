@@ -203,3 +203,60 @@ mark {
   font-weight: 600;
   letter-spacing: -0.025em;
 }
+
+/* Prevent horizontal overflow globally */
+html, body {
+  overflow-x: hidden;
+}
+
+/* Ensure all containers respect viewport width */
+* {
+  box-sizing: border-box;
+}
+
+/* Utility classes for text overflow handling */
+.break-words {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.overflow-wrap-anywhere {
+  overflow-wrap: anywhere;
+}
+
+/* Ensure pre elements don't cause horizontal overflow */
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+/* Ensure code elements within pre don't overflow */
+pre code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  display: block;
+}
+
+/* Ensure long URLs and text in inputs don't cause overflow */
+input[type="text"], input[type="url"], textarea {
+  min-width: 0;
+}
+
+/* Ensure flex items don't overflow their containers */
+.flex > * {
+  min-width: 0;
+}
+
+/* Specific fixes for response containers */
+.response-container {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.response-container pre {
+  max-width: 100%;
+  overflow-x: auto;
+}

@@ -7,6 +7,8 @@ import ResponseViewer from './ResponseViewer';
 import { useCollections } from '../hooks/useCollections';
 import { useEnvironments } from '../hooks/useEnvironments';
 import { useHistory } from '../hooks/useHistory';
+import { useApi } from '../hooks/useApi';
+import { validateUrl, formatUrl } from '../utils/validation';
 
 // Types
 interface Request {
@@ -38,6 +40,7 @@ interface ResponseData {
   data: string;
   time: number;
   size: number;
+  contentType?: string;
 }
 
 interface User {
@@ -59,6 +62,7 @@ export default function ClientInterface({ user, onLogout }: ClientInterfaceProps
   const { collections, saveRequest } = useCollections();
   const { environments, activeEnvironment, setActiveEnvironment } = useEnvironments();
   const { addToHistory } = useHistory();
+  const { proxyRequest } = useApi();
   
   // Main state
   const [activeTab, setActiveTab] = useState<string>('new-request');
@@ -79,6 +83,7 @@ export default function ClientInterface({ user, onLogout }: ClientInterfaceProps
   const [response, setResponse] = useState<ResponseData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [urlError, setUrlError] = useState('');
   
   // UI state
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -120,14 +125,24 @@ export default function ClientInterface({ user, onLogout }: ClientInterfaceProps
   const handleSend = async () => {
     setLoading(true);
     setError('');
+    setUrlError('');
     setResponse(null);
-    
-    const startTime = Date.now();
     
     try {
       // Process URL and headers with environment variables
       const baseUrl = replaceVariables(currentRequest.url);
-      const processedUrl = buildUrlWithParams(baseUrl);
+      
+      // Validate URL before processing
+      const urlValidation = validateUrl(baseUrl);
+      if (!urlValidation.canBeUsed) {
+        setUrlError(urlValidation.error || 'Invalid URL');
+        setLoading(false);
+        return;
+      }
+      
+      // Use corrected URL if available
+      const validatedUrl = urlValidation.correctedUrl || baseUrl;
+      const processedUrl = buildUrlWithParams(validatedUrl);
       const processedHeaders: Record<string, string> = {};
       
       currentRequest.headers.forEach(header => {
@@ -137,80 +152,39 @@ export default function ClientInterface({ user, onLogout }: ClientInterfaceProps
       });
       
       // Process body
-      let processedBody: string | FormData | URLSearchParams | undefined;
+      let processedBody: string | undefined;
       if (['POST', 'PUT', 'PATCH'].includes(currentRequest.method)) {
         if (currentRequest.bodyType === 'json') {
           try {
             // Parse and re-stringify to validate JSON
             const jsonBody = JSON.parse(currentRequest.body);
             processedBody = JSON.stringify(jsonBody);
-            // Ensure Content-Type is set for JSON
-            processedHeaders['Content-Type'] = 'application/json';
           } catch (e) {
             throw new Error('Invalid JSON in request body');
           }
         } else if (currentRequest.bodyType === 'form-data') {
-          const formData = new FormData();
-          // Parse form data from body (simplified example)
-          const formDataEntries = currentRequest.body.split('&');
-          formDataEntries.forEach(entry => {
-            const [key, value] = entry.split('=');
-            if (key && value) formData.append(key, value);
-          });
-          processedBody = formData;
+          // For form-data, we'll send the body as-is and let the backend handle it
+          processedBody = currentRequest.body;
         } else if (currentRequest.bodyType === 'x-www-form-urlencoded') {
-          const urlSearchParams = new URLSearchParams();
-          // Parse URL-encoded data from body (simplified example)
-          const urlEncodedEntries = currentRequest.body.split('&');
-          urlEncodedEntries.forEach(entry => {
-            const [key, value] = entry.split('=');
-            if (key && value) urlSearchParams.append(key, value);
-          });
-          processedBody = urlSearchParams;
-          // Ensure Content-Type is set for URL-encoded
-          processedHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+          processedBody = currentRequest.body;
         } else if (currentRequest.bodyType === 'raw' || currentRequest.bodyType === 'binary') {
           processedBody = replaceVariables(currentRequest.body);
         }
       }
       
-      const res = await fetch(processedUrl, {
+      // Use the proxy request instead of direct fetch
+      const responseObj = await proxyRequest({
         method: currentRequest.method,
+        url: processedUrl,
         headers: processedHeaders,
         body: processedBody,
+        bodyType: currentRequest.bodyType,
       });
-      
-      const endTime = Date.now();
-      const responseHeaders: Record<string, string> = {};
-      res.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      });
-      
-      const contentType = res.headers.get('content-type') || '';
-      let responseData: string;
-      
-      if (contentType.includes('application/json')) {
-        const jsonData = await res.json();
-        responseData = JSON.stringify(jsonData, null, 2);
-      } else {
-        responseData = await res.text();
-      }
-      
-      const responseSize = new Blob([responseData]).size;
-      
-      const responseObj = {
-        status: res.status,
-        statusText: res.statusText,
-        headers: responseHeaders,
-        data: responseData,
-        time: endTime - startTime,
-        size: responseSize
-      };
       
       setResponse(responseObj);
       
       // Add to history
-      addToHistory(currentRequest.method, processedUrl, res.status, endTime - startTime);
+      addToHistory(currentRequest.method, processedUrl, responseObj.status, responseObj.time);
       
     } catch (err: any) {
       setError(err.message || 'Request failed');
@@ -293,17 +267,34 @@ export default function ClientInterface({ user, onLogout }: ClientInterfaceProps
     setQueryParams(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Handle URL input with validation
+  const handleUrlChange = (value: string) => {
+    setCurrentRequest(prev => ({ ...prev, url: value }));
+    setUrlError('');
+    
+    // Real-time validation feedback (only show errors for non-empty URLs)
+    if (value.trim()) {
+      const validation = validateUrl(value);
+      if (!validation.canBeUsed) {
+        setUrlError(validation.error || 'Invalid URL');
+      }
+    }
+  };
+
   // Build URL with query parameters
   const buildUrlWithParams = (baseUrl: string): string => {
     const enabledParams = queryParams.filter(p => p.enabled && p.key && p.value);
     if (enabledParams.length === 0) return baseUrl;
     
-    const url = new URL(baseUrl);
-    enabledParams.forEach(param => {
-      url.searchParams.set(param.key, replaceVariables(param.value));
-    });
-    
-    return url.toString();
+    try {
+      const url = new URL(baseUrl);
+      enabledParams.forEach(param => {
+        url.searchParams.set(param.key, replaceVariables(param.value));
+      });
+      return url.toString();
+    } catch {
+      return baseUrl; // Return original if URL parsing fails
+    }
   };
 
   const handleImportData = (data: { collections?: Collection[]; environments?: Environment[] }) => {
@@ -347,7 +338,7 @@ export default function ClientInterface({ user, onLogout }: ClientInterfaceProps
   };
 
 return (
-  <div className="h-screen flex bg-gradient-to-br from-slate-50 via-white to-cyan-50 dark:from-slate-900 dark:via-slate-800 dark:to-cyan-950">
+  <div className="h-screen flex bg-gradient-to-br from-slate-50 via-white to-cyan-50 dark:from-slate-900 dark:via-slate-800 dark:to-cyan-950 overflow-hidden">
     {/* Sidebar */}
     {sidebarOpen && (
       <div className="w-80 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-r border-slate-200/50 dark:border-slate-700/50 flex flex-col shadow-xl">
@@ -411,7 +402,7 @@ return (
     )}
 
     {/* Main Content */}
-    <div className="flex-1 flex flex-col min-w-0">
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       {/* Header */}
       <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/50 p-6 shadow-sm flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -482,7 +473,7 @@ return (
       {/* Request Section */}
       <div className="flex-1 flex flex-col p-6 min-h-0">
         {/* URL Bar */}
-        <div className="flex gap-3 mb-6 flex-shrink-0">
+        <div className="flex gap-3 mb-8 flex-shrink-0">
           <select
             value={currentRequest.method}
             onChange={(e) => setCurrentRequest(prev => ({ ...prev, method: e.target.value }))}
@@ -493,17 +484,75 @@ return (
             ))}
           </select>
           
-          <input
-            type="text"
-            value={currentRequest.url}
-            onChange={(e) => setCurrentRequest(prev => ({ ...prev, url: e.target.value }))}
-            placeholder="https://api.example.com/endpoint"
-            className="flex-1 px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-          />
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={currentRequest.url}
+              onChange={(e) => handleUrlChange(e.target.value)}
+              onBlur={(e) => {
+                // Auto-correct URL on blur if possible
+                const validation = validateUrl(e.target.value);
+                if (validation.correctedUrl) {
+                  setCurrentRequest(prev => ({ ...prev, url: validation.correctedUrl! }));
+                  setUrlError('');
+                }
+              }}
+              placeholder="https://api.example.com/endpoint"
+              className={`w-full px-4 py-3 pr-10 border rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:border-transparent ${
+                urlError 
+                  ? 'border-red-300 dark:border-red-600 focus:ring-red-500' 
+                  : 'border-slate-300 dark:border-slate-600 focus:ring-cyan-500'
+              }`}
+            />
+            {/* URL validation indicator */}
+            {currentRequest.url && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                {(() => {
+                  const validation = validateUrl(currentRequest.url);
+                  if (urlError || !validation.canBeUsed) {
+                    return (
+                      <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    );
+                  } else if (validation.isValid) {
+                    return (
+                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    );
+                  } else if (validation.correctedUrl) {
+                    return (
+                      <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            )}
+            {urlError && (
+              <div className="absolute top-full left-0 mt-1 text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {urlError}
+              </div>
+            )}
+            {!urlError && currentRequest.url && validateUrl(currentRequest.url).correctedUrl && (
+              <div className="absolute top-full left-0 mt-1 text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                Will be auto-corrected to: {validateUrl(currentRequest.url).correctedUrl}
+              </div>
+            )}
+          </div>
           
           <button
             onClick={handleSend}
-            disabled={loading || !currentRequest.url}
+            disabled={loading || !currentRequest.url || !!urlError}
             className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-400 text-white rounded-lg button-text transition-all shadow-lg shadow-cyan-500/25 disabled:shadow-none"
           >
             {loading ? (
@@ -518,9 +567,9 @@ return (
         </div>
 
         {/* MAIN CONTENT AREA - CRITICAL HEIGHT FIXES */}
-        <div className="flex-1 flex gap-6 min-h-0">
+        <div className="flex-1 flex gap-6 min-h-0 overflow-hidden">
           {/* Request Details - FIXED HEIGHT CONSTRAINTS */}
-          <div className="flex-1 flex flex-col min-h-0">
+          <div className="w-1/2 flex flex-col min-h-0">
             {/* Request Tabs */}
             <div className="flex border-b border-slate-200 dark:border-slate-700 mb-4 flex-shrink-0">
               {(['params', 'headers', 'body'] as const).map(tab => (
@@ -668,7 +717,7 @@ return (
           </div>
 
           {/* Response Section - FIXED HEIGHT CONSTRAINTS */}
-          <div className="flex-1 flex flex-col min-h-0">
+          <div className="w-1/2 flex flex-col min-h-0">
             <div className="flex-shrink-0 mb-4">
               <h3 className="heading-md text-slate-900 dark:text-white">Response</h3>
             </div>

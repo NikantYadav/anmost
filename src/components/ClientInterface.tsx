@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import EnvironmentManager from './EnvironmentManager';
-import RequestHistory, { addToHistory } from './RequestHistory';
+import RequestHistory from './RequestHistory';
 import CodeGenerator from './CodeGenerator';
 import ImportExport from './ImportExport';
 import ResponseViewer from './ResponseViewer';
+import { useCollections } from '../hooks/useCollections';
+import { useEnvironments } from '../hooks/useEnvironments';
+import { useHistory } from '../hooks/useHistory';
 
 // Types
 interface Request {
@@ -49,15 +52,17 @@ interface ClientInterfaceProps {
 }
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
-const BODY_TYPES = ['json', 'form-data', 'x-www-form-urlencoded', 'raw', 'binary'] as const;
+const BODY_TYPES = ['json', 'form-data', 'x-www-form-urlencoded', 'raw' , 'binary'] as const;
 
 export default function ClientInterface({ user, onLogout }: ClientInterfaceProps) {
+  // Backend hooks
+  const { collections, saveRequest } = useCollections();
+  const { environments, activeEnvironment, setActiveEnvironment } = useEnvironments();
+  const { addToHistory } = useHistory();
+  
   // Main state
   const [activeTab, setActiveTab] = useState<string>('new-request');
   const [tabs, setTabs] = useState<Request[]>([]);
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [activeEnvironment, setActiveEnvironment] = useState<string>('');
   
   // Current request state
   const [currentRequest, setCurrentRequest] = useState<Request>({
@@ -87,29 +92,13 @@ export default function ClientInterface({ user, onLogout }: ClientInterfaceProps
     { key: '', value: '', enabled: true }
   ]);
 
-  // Load data from localStorage
-  useEffect(() => {
-    const savedCollections = localStorage.getItem('rest-client-collections');
-    const savedEnvironments = localStorage.getItem('rest-client-environments');
-    const savedActiveEnv = localStorage.getItem('rest-client-active-environment');
-    
-    if (savedCollections) setCollections(JSON.parse(savedCollections));
-    if (savedEnvironments) setEnvironments(JSON.parse(savedEnvironments));
-    if (savedActiveEnv) setActiveEnvironment(savedActiveEnv);
-  }, []);
+  // Save modal state
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveRequestName, setSaveRequestName] = useState(currentRequest.name);
+  const [saveCollectionName, setSaveCollectionName] = useState('Default');
+  const [saveError, setSaveError] = useState('');
 
-  // Save to localStorage
-  useEffect(() => {
-    localStorage.setItem('rest-client-collections', JSON.stringify(collections));
-  }, [collections]);
-
-  useEffect(() => {
-    localStorage.setItem('rest-client-environments', JSON.stringify(environments));
-  }, [environments]);
-
-  useEffect(() => {
-    localStorage.setItem('rest-client-active-environment', activeEnvironment);
-  }, [activeEnvironment]);
+  // Data is now loaded automatically by the hooks
 
   // Replace environment variables in text
   const replaceVariables = (text: string): string => {
@@ -253,33 +242,24 @@ export default function ClientInterface({ user, onLogout }: ClientInterfaceProps
     }));
   };
 
-  const saveRequest = () => {
-    const name = prompt('Enter request name:', currentRequest.name);
-    if (!name) return;
-    
-    const collectionName = prompt('Enter collection name (or leave empty for default):') || 'Default';
-    
-    let collection = collections.find(c => c.name === collectionName);
-    if (!collection) {
-      collection = {
-        id: Date.now().toString(),
-        name: collectionName,
-        requests: []
-      };
-      setCollections(prev => [...prev, collection!]);
+  const handleSaveRequest = async () => {
+    if (!saveRequestName) return;
+
+    setSaveError('');
+    try {
+      await saveRequest(saveRequestName, saveCollectionName, {
+        method: currentRequest.method,
+        url: currentRequest.url,
+        headers: currentRequest.headers,
+        body: currentRequest.body,
+        bodyType: currentRequest.bodyType
+      });
+      setShowSaveModal(false);
+      setSaveError('');
+    } catch (error: any) {
+      console.error('Failed to save request:', error);
+      setSaveError(error.message || 'Failed to save request');
     }
-    
-    const savedRequest = {
-      ...currentRequest,
-      id: Date.now().toString(),
-      name
-    };
-    
-    setCollections(prev => prev.map(c => 
-      c.id === collection!.id 
-        ? { ...c, requests: [...c.requests, savedRequest] }
-        : c
-    ));
   };
 
   const loadRequest = (request: Request) => {
@@ -484,10 +464,10 @@ return (
               Import/Export
             </button>
             <button
-              onClick={saveRequest}
-              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg button-text transition-colors"
+              onClick={() => setShowSaveModal(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg button-text transition-colors"
             >
-              Save
+              Save to Collection
             </button>
             <button
               onClick={onLogout}
@@ -736,8 +716,6 @@ return (
     {/* Modals */}
     {showEnvironmentManager && (
       <EnvironmentManager
-        environments={environments}
-        onEnvironmentsChange={setEnvironments}
         onClose={() => setShowEnvironmentManager(false)}
       />
     )}
@@ -763,6 +741,57 @@ return (
         onImport={handleImportData}
         onClose={() => setShowImportExport(false)}
       />
+    )}
+
+    {/* Save Request Modal */}
+    {showSaveModal && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-lg w-96">
+          <h3 className="heading-md text-slate-900 dark:text-white mb-4">Save Request</h3>
+          
+          {saveError && (
+            <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded text-red-700 dark:text-red-300 text-sm">
+              {saveError}
+            </div>
+          )}
+          
+          <div className="mb-4">
+            <label className="block text-sm text-slate-700 dark:text-slate-300 mb-1">Request Name</label>
+            <input
+              type="text"
+              value={saveRequestName}
+              onChange={(e) => setSaveRequestName(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm text-slate-700 dark:text-slate-300 mb-1">Collection Name</label>
+            <input
+              type="text"
+              value={saveCollectionName}
+              onChange={(e) => setSaveCollectionName(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => {
+                setShowSaveModal(false);
+                setSaveError('');
+              }}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveRequest}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
     )}
   </div>
 );

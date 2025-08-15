@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useHistory } from '../hooks/useHistory';
 
 interface HistoryItem {
   id: string;
@@ -15,16 +16,9 @@ interface RequestHistoryProps {
 }
 
 export default function RequestHistory({ onLoadRequest, onClose }: RequestHistoryProps) {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const { history, deleteHistoryItem, clearHistory } = useHistory();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMethod, setFilterMethod] = useState('');
-
-  useEffect(() => {
-    const savedHistory = localStorage.getItem('rest-client-history');
-    if (savedHistory) {
-      setHistory(JSON.parse(savedHistory));
-    }
-  }, []);
 
   const filteredHistory = history.filter(item => {
     const matchesSearch = item.url.toLowerCase().includes(searchTerm.toLowerCase());
@@ -32,17 +26,22 @@ export default function RequestHistory({ onLoadRequest, onClose }: RequestHistor
     return matchesSearch && matchesMethod;
   });
 
-  const clearHistory = () => {
+  const handleClearHistory = async () => {
     if (confirm('Are you sure you want to clear all history?')) {
-      setHistory([]);
-      localStorage.removeItem('rest-client-history');
+      try {
+        await clearHistory();
+      } catch (error) {
+        console.error('Failed to clear history:', error);
+      }
     }
   };
 
-  const deleteHistoryItem = (id: string) => {
-    const updatedHistory = history.filter(item => item.id !== id);
-    setHistory(updatedHistory);
-    localStorage.setItem('rest-client-history', JSON.stringify(updatedHistory));
+  const handleDeleteHistoryItem = async (id: string) => {
+    try {
+      await deleteHistoryItem(id);
+    } catch (error) {
+      console.error('Failed to delete history item:', error);
+    }
   };
 
   const formatTimestamp = (timestamp: number) => {
@@ -73,7 +72,7 @@ export default function RequestHistory({ onLoadRequest, onClose }: RequestHistor
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Request History</h2>
           <div className="flex items-center gap-4">
             <button
-              onClick={clearHistory}
+              onClick={handleClearHistory}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
             >
               Clear All
@@ -155,7 +154,7 @@ export default function RequestHistory({ onLoadRequest, onClose }: RequestHistor
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      deleteHistoryItem(item.id);
+                      handleDeleteHistoryItem(item.id);
                     }}
                     className="p-2 text-red-600 hover:bg-red-100 rounded ml-4"
                   >
@@ -173,19 +172,3 @@ export default function RequestHistory({ onLoadRequest, onClose }: RequestHistor
   );
 }
 
-// Helper function to add requests to history
-export const addToHistory = (method: string, url: string, status?: number, duration?: number) => {
-  const historyItem: HistoryItem = {
-    id: Date.now().toString(),
-    method,
-    url,
-    status,
-    timestamp: Date.now(),
-    duration
-  };
-
-  const existingHistory = JSON.parse(localStorage.getItem('rest-client-history') || '[]');
-  const updatedHistory = [historyItem, ...existingHistory].slice(0, 100); // Keep only last 100 requests
-  
-  localStorage.setItem('rest-client-history', JSON.stringify(updatedHistory));
-};

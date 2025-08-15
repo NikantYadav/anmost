@@ -2,6 +2,9 @@ import 'reflect-metadata';
 import { MikroORM, EntityManager } from '@mikro-orm/core';
 import { SqliteDriver } from '@mikro-orm/sqlite';
 import { User } from '../entities/User.entity';
+import { Collection, Request } from '../entities/Collection';
+import { Environment } from '../entities/Environment';
+import { History } from '../entities/History';
 
 let orm: MikroORM | null = null;
 
@@ -12,7 +15,7 @@ export async function getORM() {
 
   try {
     orm = await MikroORM.init({
-      entities: [User],
+      entities: [User, Collection, Request, Environment, History],
       driver: SqliteDriver,
       dbName: './database.sqlite',
       debug: process.env.NODE_ENV === 'development',

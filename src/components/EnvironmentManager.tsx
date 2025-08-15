@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useEnvironments } from '../hooks/useEnvironments';
 
 interface Variable {
   key: string;
@@ -13,85 +14,75 @@ interface Environment {
 }
 
 interface EnvironmentManagerProps {
-  environments: Environment[];
-  onEnvironmentsChange: (environments: Environment[]) => void;
   onClose: () => void;
 }
 
-export default function EnvironmentManager({ environments, onEnvironmentsChange, onClose }: EnvironmentManagerProps) {
+export default function EnvironmentManager({ onClose }: EnvironmentManagerProps) {
+  const { environments, createEnvironment, updateEnvironment, deleteEnvironment } = useEnvironments();
   const [selectedEnv, setSelectedEnv] = useState<string>(environments[0]?.id || '');
   const [newEnvName, setNewEnvName] = useState('');
 
   const currentEnv = environments.find(env => env.id === selectedEnv);
 
-  const createEnvironment = () => {
+  const handleCreateEnvironment = async () => {
     if (!newEnvName.trim()) return;
     
-    const newEnv: Environment = {
-      id: Date.now().toString(),
-      name: newEnvName,
-      variables: [{ key: '', value: '', enabled: true }]
-    };
-    
-    const updatedEnvs = [...environments, newEnv];
-    onEnvironmentsChange(updatedEnvs);
-    setSelectedEnv(newEnv.id);
-    setNewEnvName('');
-  };
-
-  const deleteEnvironment = (envId: string) => {
-    const updatedEnvs = environments.filter(env => env.id !== envId);
-    onEnvironmentsChange(updatedEnvs);
-    if (selectedEnv === envId) {
-      setSelectedEnv(updatedEnvs[0]?.id || '');
+    try {
+      const newEnv = await createEnvironment(newEnvName, [{ key: '', value: '', enabled: true }]);
+      setSelectedEnv(newEnv.id);
+      setNewEnvName('');
+    } catch (error) {
+      console.error('Failed to create environment:', error);
     }
   };
 
-  const addVariable = () => {
-    if (!currentEnv) return;
-    
-    const updatedEnv = {
-      ...currentEnv,
-      variables: [...currentEnv.variables, { key: '', value: '', enabled: true }]
-    };
-    
-    const updatedEnvs = environments.map(env => 
-      env.id === selectedEnv ? updatedEnv : env
-    );
-    
-    onEnvironmentsChange(updatedEnvs);
+  const handleDeleteEnvironment = async (envId: string) => {
+    try {
+      await deleteEnvironment(envId);
+      if (selectedEnv === envId) {
+        setSelectedEnv(environments.filter(env => env.id !== envId)[0]?.id || '');
+      }
+    } catch (error) {
+      console.error('Failed to delete environment:', error);
+    }
   };
 
-  const updateVariable = (index: number, field: keyof Variable, value: string | boolean) => {
+  const addVariable = async () => {
     if (!currentEnv) return;
     
-    const updatedEnv = {
-      ...currentEnv,
-      variables: currentEnv.variables.map((variable, i) => 
-        i === index ? { ...variable, [field]: value } : variable
-      )
-    };
+    const updatedVariables = [...currentEnv.variables, { key: '', value: '', enabled: true }];
     
-    const updatedEnvs = environments.map(env => 
-      env.id === selectedEnv ? updatedEnv : env
-    );
-    
-    onEnvironmentsChange(updatedEnvs);
+    try {
+      await updateEnvironment(currentEnv.id, currentEnv.name, updatedVariables);
+    } catch (error) {
+      console.error('Failed to add variable:', error);
+    }
   };
 
-  const removeVariable = (index: number) => {
+  const handleUpdateVariable = async (index: number, field: keyof Variable, value: string | boolean) => {
     if (!currentEnv) return;
     
-    const updatedEnv = {
-      ...currentEnv,
-      variables: currentEnv.variables.filter((_, i) => i !== index)
-    };
-    
-    const updatedEnvs = environments.map(env => 
-      env.id === selectedEnv ? updatedEnv : env
+    const updatedVariables = currentEnv.variables.map((variable, i) => 
+      i === index ? { ...variable, [field]: value } : variable
     );
     
-    onEnvironmentsChange(updatedEnvs);
+    try {
+      await updateEnvironment(currentEnv.id, currentEnv.name, updatedVariables);
+    } catch (error) {
+      console.error('Failed to update variable:', error);
+    }
+  };
+
+  const handleRemoveVariable = async (index: number) => {
+    if (!currentEnv) return;
+    
+    const updatedVariables = currentEnv.variables.filter((_, i) => i !== index);
+    
+    try {
+      await updateEnvironment(currentEnv.id, currentEnv.name, updatedVariables);
+    } catch (error) {
+      console.error('Failed to remove variable:', error);
+    }
   };
 
   return (
@@ -119,10 +110,10 @@ export default function EnvironmentManager({ environments, onEnvironmentsChange,
                 onChange={(e) => setNewEnvName(e.target.value)}
                 placeholder="Environment name"
                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-                onKeyPress={(e) => e.key === 'Enter' && createEnvironment()}
+                onKeyPress={(e) => e.key === 'Enter' && handleCreateEnvironment()}
               />
               <button
-                onClick={createEnvironment}
+                onClick={handleCreateEnvironment}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
               >
                 Add
@@ -144,7 +135,7 @@ export default function EnvironmentManager({ environments, onEnvironmentsChange,
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      deleteEnvironment(env.id);
+                      handleDeleteEnvironment(env.id);
                     }}
                     className="p-1 text-red-600 hover:bg-red-100 rounded"
                   >
@@ -179,25 +170,25 @@ export default function EnvironmentManager({ environments, onEnvironmentsChange,
                       <input
                         type="checkbox"
                         checked={variable.enabled}
-                        onChange={(e) => updateVariable(index, 'enabled', e.target.checked)}
+                        onChange={(e) => handleUpdateVariable(index, 'enabled', e.target.checked)}
                         className="rounded"
                       />
                       <input
                         type="text"
                         value={variable.key}
-                        onChange={(e) => updateVariable(index, 'key', e.target.value)}
+                        onChange={(e) => handleUpdateVariable(index, 'key', e.target.value)}
                         placeholder="Variable name"
                         className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
                       />
                       <input
                         type="text"
                         value={variable.value}
-                        onChange={(e) => updateVariable(index, 'value', e.target.value)}
+                        onChange={(e) => handleUpdateVariable(index, 'value', e.target.value)}
                         placeholder="Variable value"
                         className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
                       />
                       <button
-                        onClick={() => removeVariable(index)}
+                        onClick={() => handleRemoveVariable(index)}
                         className="p-2 text-red-600 hover:bg-red-100 rounded"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
